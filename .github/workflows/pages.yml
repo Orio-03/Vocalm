@@ -1,0 +1,47 @@
+name: Website
+
+# Publishes site/ (plus the README's pictures, the logo and the sharing card) to https://orio-03.github.io/Vocalm/
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "docs/images/**", "assets/**", "packaging/build_site.py", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Put the site together
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Check every link, picture and video on the site and in the README exists
+        run: python -m unittest tests.test_docs -v
+      - name: Build
+        run: python packaging/build_site.py
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    name: Publish it
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

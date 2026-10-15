@@ -34,9 +34,16 @@ def main(argv=None):
     ap.add_argument("--data-dir", help="keep settings and history here instead of %%LOCALAPPDATA%%\\Vocalm")
     ap.add_argument("--list-devices", action="store_true", help="list microphones and exit")
     ap.add_argument("--quit", action="store_true", help="ask the running Vocalm to save and quit, then exit")
+    ap.add_argument("--demo", action="store_true",
+                    help="a scripted voice and made-up history in a throwaway folder, for screenshots and videos "
+                         "(runs beside your own Vocalm, on port 48690)")
     ap.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
     args = ap.parse_args(argv)
-    if args.data_dir:
+    if args.demo:
+        from . import demo
+        args.port = args.port or demo.demo_port()
+        print("Demo data in", demo.prepare(args.port))
+    elif args.data_dir:
         paths.configure(args.data_dir)
 
     if args.quit:
@@ -58,8 +65,9 @@ def main(argv=None):
     port = args.port or cfg.port
     url = f"http://127.0.0.1:{port}/"
 
-    # A copy with its own data folder (a test, a smoke test) gets its own lock, so it can run beside yours
-    lock = "Local\\Vocalm-singleton" if not args.data_dir else "Local\\Vocalm-" + hashlib.sha1(
+    # A copy with its own data folder (a test, the smoke test, the demo) gets its own lock, so it can run beside yours
+    own = os.path.normcase(paths.DATA) == os.path.normcase(paths.default_data_dir())
+    lock = "Local\\Vocalm-singleton" if own else "Local\\Vocalm-" + hashlib.sha1(
         paths.DATA.lower().encode()).hexdigest()[:12]
     if not winapi.claim_single_instance(lock):
         # Already running: double-clicking again should just bring up the dashboard
@@ -72,7 +80,7 @@ def main(argv=None):
                                f"port {port}. Quit it from the tray icon, or end Vocalm in Task Manager.")
         return
 
-    legacy = paths.legacy_dir()
+    legacy = None if args.demo else paths.legacy_dir()
     if first_start and legacy:
         carried = settings.from_legacy(legacy)
         if carried is not None:
@@ -91,10 +99,15 @@ def main(argv=None):
         from .overlay import Core
         from .server import Server
         from .tray import Tray
-        core = Core(cfg, history, port)
+        if args.demo:
+            from .demo import FixedApp, ScriptedMeter
+            core = Core(cfg, history, port, meter=ScriptedMeter(cfg), watcher=FixedApp())
+        else:
+            core = Core(cfg, history, port)
         server = Server(core, port)
         port = server.start()
-        Tray(core).start()
+        if not args.demo:  # one tray icon is enough; the demo is driven from its dashboard
+            Tray(core).start()
         if not (args.background or args.no_open):
             threading.Timer(0.6, webbrowser.open, args=(f"http://127.0.0.1:{port}/",)).start()
         core.run()

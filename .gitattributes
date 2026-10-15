@@ -9,3 +9,6 @@
 *.yml text eol=lf
 *.ico binary
 *.png binary
+*.mjs text eol=lf
+*.webp binary
+*.mp4 binary

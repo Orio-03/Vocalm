@@ -52,7 +52,8 @@ def rounded_rect(canvas, x1, y1, x2, y2, r, **kw):
 
 
 class Core:
-    def __init__(self, cfg, store, port):
+    def __init__(self, cfg, store, port, meter=None, watcher=None):
+        """meter and watcher replace the microphone and the which-app-is-in-front check (demo mode does)."""
         self.cfg = cfg
         self.store = store
         self.port = port
@@ -62,8 +63,8 @@ class Core:
         self.hotkey_failures = []
 
         now = time.time()
-        self.meter = LevelMeter(cfg)
-        self.watcher = winapi.ForegroundWatcher()
+        self.meter = meter or LevelMeter(cfg)
+        self.watcher = watcher or winapi.ForegroundWatcher()
         self.app_name = ""
         self.tracker = Tracker(cfg, now)
         self.switch_result = None     # when an older line was moved over to perceived loudness, by how much

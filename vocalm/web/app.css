@@ -114,7 +114,7 @@ kbd{font-family:var(--display);font-size:11.5px;font-weight:600;padding:1px 7px;
 .hero{display:grid;grid-template-columns:1fr 310px;gap:28px;padding:26px 28px;
   background:linear-gradient(160deg,color-mix(in srgb,var(--accent) 6%,var(--panel)),var(--panel) 45%)}
 .hero-main{min-width:0}
-.hero-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:18px}
+.hero-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:38px}  /* room for the red peak's label */
 .status{display:inline-flex;align-items:center;gap:11px;font-family:var(--display);font-size:26px;font-weight:600;letter-spacing:-.01em}
 .status i{width:13px;height:13px;border-radius:50%;background:var(--faint);transition:background .2s}
 .status[data-zone=calm] i{background:var(--good)}
@@ -163,7 +163,7 @@ kbd{font-family:var(--display);font-size:11.5px;font-weight:600;padding:1px 7px;
 .moments .peak{font-family:var(--display);font-weight:600;font-size:15px;font-variant-numeric:tabular-nums}
 .moments .len{font-family:var(--display);color:var(--faint);font-size:13px;min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
 .bars{display:flex;flex-direction:column;gap:12px}
-.barrow{display:grid;grid-template-columns:minmax(100px,1.2fr) 2fr auto;gap:14px;align-items:center}
+.barrow{display:grid;grid-template-columns:minmax(100px,1.2fr) 2fr 140px;gap:14px;align-items:center}  /* fixed value column: every bar starts at the same x */
 .barrow .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .barrow .track{height:10px;position:relative}
 .barrow .track i{position:absolute;left:0;top:0;bottom:0;border-radius:0 4px 4px 0;background:var(--accent)}

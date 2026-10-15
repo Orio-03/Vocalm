@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vocalm: a loudness bar that tells you when you're too loud on Discord</title>
+<meta name="description" content="Vocalm puts a small click-through bar over your game that turns red the moment you get too loud for your friends on Discord, nudges you to breathe, and shows when and in which games you get loudest. Free for Windows; no audio is ever recorded.">
+<link rel="canonical" href="https://orio-03.github.io/Vocalm/">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Vocalm: hear yourself before your friends do">
+<meta property="og:description" content="A calm, click-through loudness bar for gaming on Discord, and a dashboard of when and where you get loud. Free for Windows.">
+<meta property="og:url" content="https://orio-03.github.io/Vocalm/">
+<meta property="og:image" content="https://orio-03.github.io/Vocalm/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0a0e0d">
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Vocalm", "operatingSystem": "Windows 10, Windows 11",
+ "applicationCategory": "UtilitiesApplication", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+ "downloadUrl": "https://github.com/Orio-03/Vocalm/releases/latest", "image": "https://orio-03.github.io/Vocalm/social-preview.png",
+ "description": "A click-through microphone loudness bar for gaming on Discord, with a breathe nudge and a local dashboard."}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --display:"Bahnschrift","Barlow","DIN Alternate","Segoe UI",system-ui,sans-serif;
+  --font:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"Helvetica Neue",sans-serif;
+  --bg:#0a0e0d;--panel:#111716;--panel-2:#161e1d;--panel-3:#1d2726;--line:#212b2a;--line-2:#2f3c3a;
+  --text:#ecf3f1;--muted:#a3b3af;--faint:#728480;--accent:#3fbfad;--accent-hi:#5ccfbe;--on-accent:#03201b;
+  --calm:#3ddc84;--close:#ffb020;--loud:#ff4d4d;--r:20px;color-scheme:dark
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:84px}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 var(--font);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+img,video{display:block;max-width:100%;height:auto}
+h1,h2,h3{font-family:var(--display);font-weight:600;line-height:1.08;margin:0;letter-spacing:-.015em}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+.eyebrow{font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+.lede{color:var(--muted);font-size:19px;max-width:60ch}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:13px 22px;border-radius:14px;font-family:var(--display);font-weight:600;font-size:17px;letter-spacing:.01em;text-decoration:none;border:1px solid var(--line-2);background:var(--panel-2);color:var(--text);cursor:pointer;transition:transform .15s,border-color .15s,background .15s}
+.btn:hover{border-color:var(--muted);transform:translateY(-1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);box-shadow:0 10px 30px rgba(63,191,173,.25)}
+.btn.primary:hover{background:var(--accent-hi);border-color:var(--accent-hi)}
+.btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.small{font-size:14px;color:var(--faint)}
+
+/* nav */
+nav{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(16px);border-bottom:1px solid transparent;transition:border-color .2s}
+nav.scrolled{border-bottom-color:var(--line)}
+nav .wrap{display:flex;align-items:center;gap:28px;height:68px}
+.brand{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:650;font-size:22px;text-decoration:none}
+.brand img{width:34px;height:34px;border-radius:10px;box-shadow:0 6px 20px rgba(63,191,173,.3)}
+nav .links{display:flex;gap:24px;margin-left:auto}
+nav .links a{font-family:var(--display);font-weight:500;color:var(--muted);text-decoration:none}
+nav .links a:hover{color:var(--text)}
+nav .btn{padding:9px 16px;font-size:15px}
+
+/* hero */
+.hero{position:relative;padding:84px 0 40px;text-align:center}
+.hero::before{content:"";position:absolute;inset:-200px 0 auto;height:760px;background:radial-gradient(700px 380px at 50% 30%,rgba(63,191,173,.18),transparent 70%),radial-gradient(500px 300px at 85% 10%,rgba(61,220,132,.06),transparent 70%);pointer-events:none;z-index:-1}
+.hero h1{font-size:clamp(40px,7vw,84px);margin:16px auto 22px}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.hero .lede{margin:0 auto 34px}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.meta{margin-top:18px}
+.screen{position:relative;margin:58px auto 0;max-width:1100px;border-radius:22px;padding:10px;background:linear-gradient(160deg,var(--line-2),var(--panel));box-shadow:0 40px 100px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04) inset}
+.screen video{width:100%;border-radius:14px;aspect-ratio:16/9;background:#0b131a}
+.caption{margin-top:18px}
+
+/* sections */
+section{padding:110px 0}
+.section-head{max-width:720px;margin-bottom:54px}
+.section-head h2{font-size:clamp(34px,4.6vw,54px);margin:12px 0 16px}
+.center{text-align:center;margin-left:auto;margin-right:auto}
+
+/* try it */
+.try{background:linear-gradient(180deg,transparent,rgba(63,191,173,.05) 30%,transparent)}
+.stage{position:relative;border-radius:var(--r);border:1px solid var(--line);background:radial-gradient(800px 300px at 80% 0%,rgba(63,191,173,.08),transparent 70%),linear-gradient(180deg,#0e1a22,#0b1117);padding:56px 40px 40px;overflow:hidden}
+.stage .hud{display:flex;justify-content:flex-end;min-height:180px}
+.vbar{position:relative;display:flex;align-items:center;gap:10px;height:40px}
+.vtrack{position:relative;width:360px;height:24px;border-radius:999px;background:#1a2120;border:1px solid #2c3836;transition:height .12s,width .12s,margin .12s}
+.vbar.loud .vtrack{height:34px;width:376px;margin:0 -8px}
+.vfill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--calm);width:0}
+.vline{position:absolute;top:4px;bottom:4px;width:2px;background:#8a9b97;border-radius:2px}
+.vneedle{position:absolute;top:-6px;bottom:-6px;width:4px;margin-left:-2px;background:#eef5f3;border-radius:2px;transition:left .25s ease-out,opacity .3s}
+.vpill{display:flex;align-items:baseline;gap:4px;padding:6px 16px 6px 14px;border-radius:999px;background:#101615;border:1px solid #2c3836;font-family:var(--display);transition:opacity .3s,transform .3s}
+.vpill i{width:9px;height:9px;border-radius:50%;background:var(--loud);align-self:center;margin-right:6px}
+.vpill b{font-size:20px;font-weight:700}
+.vpill span{font-size:14px;color:#9fb2ad}
+.vpill.off,.vneedle.off{opacity:0}
+.vpill.off{transform:translateX(8px)}
+.vcard{position:absolute;right:40px;top:120px;width:360px;padding:20px 24px 18px 30px;border-radius:16px;background:#101615;border:1px solid var(--loud);box-shadow:0 20px 50px rgba(0,0,0,.45);opacity:0;transform:translateX(30px);transition:opacity .35s,transform .35s cubic-bezier(.2,.8,.2,1)}
+.vcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--loud);border-radius:16px 0 0 16px}
+.vcard.show{opacity:1;transform:none}
+.vcard b{display:block;font-family:var(--display);font-size:24px}
+.vcard span{color:#9fb2ad;font-family:var(--display)}
+.controls{display:grid;grid-template-columns:auto 1fr auto;gap:18px 26px;align-items:center;margin-top:34px;padding-top:28px;border-top:1px solid var(--line)}
+.controls .state{font-family:var(--display);font-size:22px;font-weight:600;display:flex;align-items:center;gap:10px;min-width:190px}
+.controls .state i{width:12px;height:12px;border-radius:50%;background:var(--faint)}
+.controls label{font-family:var(--display);font-weight:600;color:var(--muted);display:flex;align-items:center;gap:14px}
+.controls input[type=range]{flex:1;accent-color:var(--accent)}
+.controls .note{grid-column:1 / -1;font-size:14px;color:var(--faint);margin:0}
+.mode{font-family:var(--display);font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);position:absolute;left:40px;top:28px}
+.mode.mic{color:var(--accent)}
+
+/* features */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.feature{padding:28px 26px;border-radius:var(--r);background:var(--panel);border:1px solid var(--line);transition:border-color .2s,transform .2s}
+.feature:hover{border-color:var(--line-2);transform:translateY(-2px)}
+.feature .ic{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:rgba(63,191,173,.12);color:var(--accent);margin-bottom:18px}
+.feature .ic svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.feature h3{font-size:22px;margin-bottom:8px}
+.feature p{margin:0;color:var(--muted)}
+
+.split{display:grid;grid-template-columns:1fr 1.25fr;gap:56px;align-items:center;margin-top:90px}
+.split.flip{grid-template-columns:1.25fr 1fr}
+.split.flip .copy{order:2}
+.split h3{font-size:34px;margin:10px 0 14px}
+.split p{color:var(--muted);margin:0 0 14px}
+.split ul{margin:0;padding:0;list-style:none;color:var(--muted)}
+.split li{padding:7px 0 7px 28px;position:relative}
+.split li::before{content:"";position:absolute;left:4px;top:15px;width:10px;height:10px;border-radius:50%;border:2px solid var(--accent)}
+.media{border-radius:var(--r);overflow:hidden;border:1px solid var(--line);background:var(--panel);box-shadow:0 30px 70px rgba(0,0,0,.45)}
+
+/* dashboard tabs */
+.tabs{display:flex;gap:4px;padding:4px;border-radius:14px;background:var(--panel);border:1px solid var(--line);width:max-content;margin:0 auto 22px}
+.tabs button{border:0;background:none;color:var(--muted);font-family:var(--display);font-weight:600;font-size:16px;padding:9px 18px;border-radius:10px;cursor:pointer}
+.tabs button.on{background:var(--accent);color:var(--on-accent)}
+.shots{position:relative}
+.shots figure{margin:0;display:none}
+.shots figure.on{display:block;animation:fade .35s}
+.shots figcaption{text-align:center;color:var(--faint);font-size:15px;margin-top:16px}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;counter-reset:step}
+.step{padding:28px 26px;border-radius:var(--r);background:var(--panel);border:1px solid var(--line)}
+.step::before{counter-increment:step;content:counter(step);display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-family:var(--display);font-weight:700;font-size:19px;margin-bottom:18px}
+.step h3{font-size:22px;margin-bottom:8px}
+.step p{margin:0;color:var(--muted)}
+.step code{font-size:14px;background:var(--panel-3);padding:2px 7px;border-radius:6px}
+.step img{margin-top:18px;border-radius:12px;border:1px solid var(--line)}
+
+/* privacy */
+.privacy{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.privacy div{padding:24px;border-radius:var(--r);border:1px solid var(--line);background:var(--panel)}
+.privacy b{display:block;font-family:var(--display);font-size:20px;margin-bottom:6px}
+.privacy p{margin:0;color:var(--muted);font-size:15px}
+
+/* faq */
+.faq{max-width:820px;margin:0 auto}
+details{border-bottom:1px solid var(--line);padding:4px 0}
+summary{cursor:pointer;list-style:none;padding:20px 40px 20px 0;font-family:var(--display);font-weight:600;font-size:20px;position:relative}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"";position:absolute;right:8px;top:28px;width:10px;height:10px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);transition:transform .2s}
+details[open] summary::after{transform:rotate(-135deg);top:33px}
+details p{color:var(--muted);margin:0 0 20px}
+
+.final{text-align:center;padding:120px 0}
+.final h2{font-size:clamp(38px,5vw,60px);margin:0 auto 18px;max-width:16ch}
+footer{border-top:1px solid var(--line);padding:34px 0 50px;color:var(--faint);font-size:14px}
+footer .wrap{display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+footer a{color:var(--muted)}
+
+/* scroll reveal */
+.reveal{opacity:0;transform:translateY(22px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.8,.2,1)}
+.reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.reveal{opacity:1;transform:none;transition:none}*{animation:none!important}}
+
+@media (max-width:900px){
+  nav .links{display:none}
+  .grid,.steps{grid-template-columns:1fr}
+  .privacy{grid-template-columns:1fr 1fr}
+  .split,.split.flip{grid-template-columns:1fr;gap:28px}
+  .split.flip .copy{order:0}
+  .stage{padding:56px 18px 24px}
+  .stage .hud{justify-content:center;min-height:200px}
+  .vtrack{width:150px}.vbar.loud .vtrack{width:162px}
+  .vpill{padding:5px 12px 5px 10px}.vpill b{font-size:17px}
+  .vcard{left:18px;right:18px;width:auto;top:130px}
+  .controls{grid-template-columns:1fr}
+  section{padding:80px 0}
+}
+</style>
+</head>
+<body>
+<nav id="nav">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="logo.svg" alt="">Vocalm</a>
+    <div class="links">
+      <a href="#try">Try it</a><a href="#features">Features</a><a href="#dashboard">Dashboard</a><a href="#start">Get started</a><a href="#faq">FAQ</a>
+      <a href="https://github.com/Orio-03/Vocalm">GitHub</a>
+    </div>
+    <a class="btn primary" href="https://github.com/Orio-03/Vocalm/releases/latest">Download</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Free for Windows · for gaming on Discord</span>
+    <h1>Hear yourself before<br><em>your friends do</em>.</h1>
+    <p class="lede">Vocalm puts a small bar over your game that turns red the moment you get too loud, nudges you to breathe, and shows you when and where you get loudest, so you can actually get calmer.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/Orio-03/Vocalm/releases/latest"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download for Windows</a>
+      <a class="btn" href="#try"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Try it with your voice</a>
+    </div>
+    <p class="meta small" id="release">Windows 10 and 11 · nothing to install but the app · no audio is ever recorded</p>
+    <div class="screen reveal">
+      <video src="media/bar.mp4" poster="media/bar-poster.webp" autoplay muted loop playsinline width="1280" height="720"
+             aria-label="Vocalm's bar in the top-right corner of a game: green while calm, amber, then red with a breathe card when the player shouts"></video>
+    </div>
+    <p class="small caption">The real bar in the top-right corner of a game: calm, getting close, too loud, then a breathe card.</p>
+  </div>
+</header>
+
+<section class="try" id="try">
+  <div class="wrap">
+    <div class="section-head center reveal" style="text-align:center">
+      <span class="eyebrow">Try it</span>
+      <h2>See what your friends hear</h2>
+      <p class="lede center">Here's the bar, playing a scripted voice. Switch to your own microphone and talk, then shout. It all runs in this page: nothing is recorded or sent anywhere.</p>
+    </div>
+    <div class="stage reveal" id="stage">
+      <span class="mode" id="mode">Scripted voice</span>
+      <div class="hud">
+        <div class="vbar" id="vbar">
+          <div class="vtrack"><div class="vfill" id="vfill"></div><div class="vline" id="vline"></div><div class="vneedle off" id="vneedle"></div></div>
+          <div class="vpill off" id="vpill"><i></i><b id="vpeak">-12.2</b><span>dB</span></div>
+        </div>
+      </div>
+      <div class="vcard" id="vcard"><b id="vmsg">Take a breath.</b><span>calm streak ended at <span id="vstreak">0s</span></span></div>
+      <div class="controls">
+        <div class="state" id="vstate"><i></i><span>Not talking</span></div>
+        <label>Your line <input type="range" id="vlinein" min="-60" max="-6" step="1" value="-24"> <span id="vlineval">-24 dB</span></label>
+        <button class="btn primary" id="vmic" type="button"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Use my microphone</button>
+        <p class="note" id="vnote">Talk normally first, then drag your line a little above where your voice sits. In Vocalm itself, a 15-second calibration does this for you.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Features</span>
+      <h2>Built to stay out of your way, until it shouldn't</h2>
+      <p class="lede">Everything about the bar is designed for the middle of a match: you catch it in the corner of your eye, and it never takes anything from your game.</p>
+    </div>
+    <div class="grid">
+      <div class="feature reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 4l7 17 2-7 7-2z"/></svg></div><h3>Never in the way</h3><p>Clicks go straight through the bar, it can never take focus from your game, and it stays out of Alt-Tab. Put it anywhere, even on the taskbar.</p></div>
+      <div class="feature reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div><h3>Instant, at a glance</h3><p>Green while you're calm, amber as you get close to your line, red and a little bigger the moment you're over it.</p></div>
+      <div class="feature reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v18M5 8h14"/></svg></div><h3>Your last red peak</h3><p>When you've gone over, a needle and a readout show how far, then clear away after a time you choose. Calm moments are never shown.</p></div>
+      <div class="feature reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 12c4-6 12-6 16 0M4 12c4 6 12 6 16 0"/></svg></div><h3>A nudge, not a nag</h3><p>Stay loud for more than a moment and a small breathe card slides in for a few seconds. A laugh doesn't count. It never makes a sound.</p></div>
+      <div class="feature reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M2 12c2-4 3-4 5 0s3 4 5 0 3-4 5 0 3 4 5 0"/></svg></div><h3>Loud the way ears hear it</h3><p>Levels are A-weighted, like a dB(A) meter, so a high-pitched shout counts as loud as it sounds, not just as loud as its raw energy.</p></div>
+      <div class="feature reveal"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg></div><h3>Private by design</h3><p>No audio is ever recorded or stored, just how loud you were and when. No account, no uploads. Everything stays on your PC.</p></div>
+    </div>
+
+    <div class="split reveal">
+      <div class="copy">
+        <span class="eyebrow">Up close</span>
+        <h3>It only speaks up when you've been too loud</h3>
+        <p>Talking calmly or getting close, the bar just shows your level. Go over your line and it grows and turns red, a needle marks how far you went, and if you stay loud a breathe card slides in.</p>
+        <ul><li>The readout shows your last red peak, never calm ones</li><li>It clears itself after 1, 5, 10 or 15 minutes, or whenever you like</li><li>Or show your calm streak beside the bar instead</li></ul>
+      </div>
+      <div class="media"><video src="media/bar-closeup.mp4" poster="media/bar-closeup-poster.webp" autoplay muted loop playsinline aria-label="Close up of the bar: green, amber, then red with the red peak readout and the breathe card"></video></div>
+    </div>
+
+    <div class="split flip reveal">
+      <div class="copy">
+        <span class="eyebrow">Calibrated to you</span>
+        <h3>Your line, from your own voice</h3>
+        <p>Talk normally for ten seconds, then too loudly for five. Vocalm puts your line between the two, through your own microphone, so "too loud" means too loud for you.</p>
+        <ul><li>Measures what Discord actually sends (SteelSeries Sonar or any mic)</li><li>Never sets your line so close that normal speech trips it</li><li>Change it any time, against your live voice</li></ul>
+      </div>
+      <div class="media"><img src="images/calibrate.webp" alt="Calibrate your voice in two short passes, then set your line against your live voice" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<section id="dashboard" style="padding-top:40px">
+  <div class="wrap">
+    <div class="section-head center reveal" style="text-align:center">
+      <span class="eyebrow">The dashboard</span>
+      <h2>Find out when and where you get loud</h2>
+      <p class="lede center">A dashboard on your own PC shows your voice live, today's loud moments, and the patterns behind them: this week against the last, the hours you get heated, and the games that set you off.</p>
+    </div>
+    <div class="media reveal" style="max-width:1100px;margin:0 auto 60px"><video src="media/dashboard.mp4" poster="media/dashboard-poster.webp" autoplay muted loop playsinline aria-label="The dashboard: the live meter going red, then the Insights page scrolling through charts"></video></div>
+    <div class="tabs reveal" role="tablist">
+      <button class="on" data-shot="live" role="tab">Live</button><button data-shot="insights" role="tab">Insights</button><button data-shot="heatmap" role="tab">Patterns</button><button data-shot="settings" role="tab">Settings</button>
+    </div>
+    <div class="shots reveal">
+      <figure class="on" data-shot="live"><div class="media"><img src="images/live.webp" alt="Live: too loud right now, the last red peak, a 30-second trace and today's loud moments" width="1440" height="900"></div><figcaption>Live: your level as it happens, your calm streak, and today's loud moments.</figcaption></figure>
+      <figure data-shot="insights"><div class="media"><img src="images/insights.webp" alt="Insights: calmer than the week before, totals, and loud moments per day" loading="lazy" width="1440" height="900"></div><figcaption>Insights: this week against the last, measured per hour of talking so long sessions don't skew it.</figcaption></figure>
+      <figure data-shot="heatmap"><div class="media"><img src="images/heatmap.webp" alt="When you get loud by weekday and hour, where you get loud by game, and your loudest moments" loading="lazy" width="1440" height="900"></div><figcaption>Patterns: the hours you get heated, and the games that set you off.</figcaption></figure>
+      <figure data-shot="settings"><div class="media"><img src="images/settings.webp" alt="Settings: calibrate your voice, your line and the bar" loading="lazy" width="1440" height="900"></div><figcaption>Settings: calibration, your line, the bar, and the breathe card.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Get started</span>
+      <h2>Up and running in a minute</h2>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><h3>Download</h3><p>Get <code>Vocalm-…-windows.zip</code> from the latest release and unzip it anywhere you'll keep it.</p><img src="images/download.webp" alt="The release's assets with the Windows zip highlighted"></div>
+      <div class="step reveal"><h3>Run it</h3><p>Double-click <code>Vocalm.exe</code>. The bar appears, a tray icon sits by the clock, and the dashboard opens. If Windows says it protected your PC, choose <b>More info</b>, then <b>Run anyway</b>.</p></div>
+      <div class="step reveal"><h3>Calibrate, then play</h3><p>In Settings, calibrate your voice (15 seconds), turn on Start with Windows, and play. Games need to run in borderless or windowed mode for any overlay to show.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="privacy" style="padding-top:20px">
+  <div class="wrap">
+    <div class="section-head reveal"><span class="eyebrow">Privacy</span><h2>Your voice stays yours</h2></div>
+    <div class="privacy">
+      <div class="reveal"><b>No recordings</b><p>Sound becomes a level about 90 times a second and is thrown away straight after.</p></div>
+      <div class="reveal"><b>On your PC</b><p>Settings and history live in one folder of yours. The dashboard only answers this PC.</p></div>
+      <div class="reveal"><b>No titles</b><p>It notes which game was in front by the program's name, never window titles.</p></div>
+      <div class="reveal"><b>No account</b><p>No sign-up, no telemetry, nothing uploaded. Delete one folder and it's gone.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="section-head center reveal" style="text-align:center"><span class="eyebrow">Questions</span><h2>Good to know</h2></div>
+    <div class="faq reveal">
+      <details><summary>The bar doesn't show over my game</summary><p>No overlay can draw over a game in exclusive fullscreen. Switch the game to borderless (or windowed) fullscreen in its video settings; it looks the same and the bar shows up.</p></details>
+      <details><summary>Will it slow my game down?</summary><p>No. Vocalm uses a fraction of a percent of your processor and only redraws the bar when your level changes. It never takes focus, so it can't interrupt you.</p></details>
+      <details><summary>Which microphone does it listen to?</summary><p>Whichever you choose in Settings. With SteelSeries Sonar it defaults to Sonar's microphone, which is exactly what Discord sends, so the bar shows what your friends hear. Discord and Vocalm can use the same microphone at the same time.</p></details>
+      <details><summary>Does it record what I say?</summary><p>Never. It keeps how loud you were and when, plus the name of the app in front if you allow it. No audio, no words, no window titles.</p></details>
+      <details><summary>Windows says it "protected your PC"</summary><p>Windows shows this for new apps that haven't paid for a code-signing certificate. Choose More info, then Run anyway; you only need to once. Only download Vocalm from its GitHub releases.</p></details>
+      <details><summary>Is it free?</summary><p>Yes, for personal and other noncommercial use, under the PolyForm Noncommercial license. The code is on GitHub.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap reveal">
+    <h2>Be the calm one<br>on the call.</h2>
+    <p class="lede center" style="margin:0 auto 32px">Free, for Windows 10 and 11.</p>
+    <div class="cta"><a class="btn primary" href="https://github.com/Orio-03/Vocalm/releases/latest"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download Vocalm</a><a class="btn" href="https://github.com/Orio-03/Vocalm">View on GitHub</a></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="#" style="font-size:18px"><img src="logo.svg" alt="" style="width:26px;height:26px;border-radius:8px">Vocalm</a>
+    <span>© 2026 Ayman Kandouli · <a href="https://github.com/Orio-03/Vocalm/blob/main/LICENSE.md">PolyForm Noncommercial</a> · <a href="https://github.com/Orio-03/Vocalm/blob/main/PRIVACY.md">Privacy</a></span>
+    <span style="margin-left:auto">From the maker of <a href="https://orio-03.github.io/Cliptrove/">Cliptrove</a>. Not affiliated with Discord or SteelSeries.</span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  // ---------- nav border and scroll reveal ----------
+  const nav = document.getElementById('nav');
+  addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 10), {passive: true});
+  const io = new IntersectionObserver((entries) => entries.forEach((e) => {
+    if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }), {threshold: 0.12});
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+
+  // ---------- dashboard screenshot tabs ----------
+  document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.shots figure').forEach((f) => f.classList.toggle('on', f.dataset.shot === b.dataset.shot));
+  }));
+
+  // ---------- the latest release, if GitHub answers ----------
+  fetch('https://api.github.com/repos/Orio-03/Vocalm/releases/latest').then((r) => r.ok ? r.json() : null).then((rel) => {
+    if (!rel) return;
+    const zip = (rel.assets || []).find((a) => /windows\.zip$/.test(a.name));
+    document.getElementById('release').textContent = `Version ${rel.tag_name.replace(/^v/, '')}` +
+      (zip ? ` · ${(zip.size / 1e6).toFixed(0)} MB` : '') + ' · Windows 10 and 11 · no audio is ever recorded';
+  }).catch(() => {});
+
+  // ---------- Try it: the bar, driven by a scripted voice or your own microphone ----------
+  const $ = (id) => document.getElementById(id);
+  const SCRIPT = [[2.4, -33, -32, 4], [0.6, -80, -80, 0], [3, -32, -31, 4], [2.5, -30, -26.5, 3], [3.2, -19, -13, 2.5],
+    [1.4, -80, -80, 0], [4.5, -33, -33, 4], [0.8, -80, -80, 0], [3.2, -32, -32, 4], [4.4, -80, -80, 0]];
+  const PERIOD = SCRIPT.reduce((s, x) => s + x[0], 0);
+  const NUDGES = ['Take a breath.', 'Ease off a little.', 'Drop it a notch.', 'Breathe, lower the volume.', 'Soften up.'];
+  function scripted(t) {
+    t %= PERIOD;
+    for (const [len, a, b, wob] of SCRIPT) {
+      if (t < len) {
+        let v = a + (b - a) * (t / len);
+        if (wob) v += wob * (0.5 * Math.sin(t * 2 * Math.PI * 3.7) + 0.5 * Math.sin(t * 2 * Math.PI * 1.3)) + (Math.random() - 0.5) * 2.4;
+        return v;
+      }
+      t -= len;
+    }
+    return -80;
+  }
+
+  // A-weighting, as in the app: weight each frequency by how loud it sounds, then add the energy up
+  const N = 2048;
+  let analyser = null, buf = null, weights = null, hann = null;
+  const aw = (f) => { const f2 = f * f; const ra = (12194 ** 2 * f2 * f2) / ((f2 + 20.6 ** 2) * Math.sqrt((f2 + 107.7 ** 2) * (f2 + 737.9 ** 2)) * (f2 + 12194 ** 2)); return ra * ra * 10 ** 0.2; };
+  function fftPower(x) {  // in-place radix-2 FFT of a real block; returns |X_k|^2 for k = 0..N/2
+    const re = Float64Array.from(x), im = new Float64Array(N);
+    for (let i = 1, j = 0; i < N; i++) { let bit = N >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; } }
+    for (let len = 2; len <= N; len <<= 1) {
+      const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+      for (let i = 0; i < N; i += len) {
+        let cr = 1, ci = 0;
+        for (let k = 0; k < len / 2; k++) {
+          const a = i + k, b = a + len / 2, tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+          [cr, ci] = [cr * wr - ci * wi, cr * wi + ci * wr];
+        }
+      }
+    }
+    const p = new Float64Array(N / 2 + 1);
+    for (let k = 0; k <= N / 2; k++) p[k] = re[k] * re[k] + im[k] * im[k];
+    return p;
+  }
+  function micLevel() {
+    analyser.getFloatTimeDomainData(buf);
+    const x = new Float64Array(N);
+    for (let i = 0; i < N; i++) x[i] = buf[i] * hann[i];
+    const p = fftPower(x);
+    let sum = 0;
+    for (let k = 0; k <= N / 2; k++) sum += weights[k] * p[k];
+    return 10 * Math.log10(Math.max(sum * hannScale, 1e-24));
+  }
+  let hannScale = 1;
+  async function useMic() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: false}});
+      const ctx = new AudioContext();
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = N;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      buf = new Float32Array(N);
+      hann = Float64Array.from({length: N}, (_, i) => 0.5 - 0.5 * Math.cos(2 * Math.PI * i / N));
+      weights = Float64Array.from({length: N / 2 + 1}, (_, k) => aw(k * ctx.sampleRate / N) * (k && k < N / 2 ? 2 : 1));
+      hannScale = 1 / (N * hann.reduce((s, w) => s + w * w, 0));
+      $('mode').textContent = 'Your microphone · stays in this page';
+      $('mode').classList.add('mic');
+      $('vmic').hidden = true;
+      $('vlinein').value = -30; showLine();
+    } catch (e) {
+      $('vnote').textContent = "Couldn't use your microphone (" + (e.message || e.name) + '). The scripted voice keeps playing.';
+    }
+  }
+  $('vmic').addEventListener('click', useMic);
+
+  let line = -24;
+  const showLine = () => { line = +$('vlinein').value; $('vlineval').textContent = `${line} dB`; };
+  $('vlinein').addEventListener('input', showLine);
+
+  const floor = () => line - 24, top = () => line + 15;
+  const frac = (db) => Math.max(0, Math.min(1, (db - floor()) / (top() - floor())));
+  let env = -120, hot = false, over = 0, redPeak = null, redAt = 0, lastLoud = performance.now(), cardAt = -1e9, last = performance.now();
+  const t0 = performance.now();
+  const COLORS = {calm: '#3ddc84', close: '#ffb020', loud: '#ff4d4d'};
+  function frame(now) {
+    const dt = Math.min(0.1, (now - last) / 1000); last = now;
+    const raw = analyser ? micLevel() : scripted((now - t0) / 1000);
+    const coef = Math.exp(-dt / (raw > env ? 0.05 : 0.4));
+    env = env < -119 ? raw : coef * env + (1 - coef) * raw;
+    const speaking = env > floor();
+    if (env >= line) hot = true; else if (env < line - 2) hot = false;
+    const zone = !speaking ? 'quiet' : hot ? 'loud' : env >= line - 6 ? 'close' : 'calm';
+    if (hot && speaking) {
+      redPeak = (redPeak === null || now - redAt > 3000) ? env : Math.max(redPeak, env);
+      redAt = now;
+      over += dt;
+      if (over >= 1.5 && now - cardAt > 20000) {
+        cardAt = now;
+        $('vmsg').textContent = NUDGES[Math.floor(Math.random() * NUDGES.length)];
+        const s = Math.round((now - lastLoud) / 1000);
+        $('vstreak').textContent = s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+        $('vcard').classList.add('show');
+        setTimeout(() => $('vcard').classList.remove('show'), 4000);
+        lastLoud = now;
+      }
+    } else over = 0;
+    const showPeak = redPeak !== null && now - redAt < 10000;
+    $('vbar').classList.toggle('loud', zone === 'loud');
+    $('vfill').style.width = (frac(env) * 100).toFixed(2) + '%';
+    $('vfill').style.background = COLORS[zone] || COLORS.calm;
+    $('vline').style.left = (frac(line) * 100).toFixed(2) + '%';
+    $('vneedle').classList.toggle('off', !showPeak);
+    $('vpill').classList.toggle('off', !showPeak);
+    if (redPeak !== null) { $('vneedle').style.left = (frac(redPeak) * 100).toFixed(2) + '%'; $('vpeak').textContent = redPeak.toFixed(1); }
+    const label = {quiet: 'Not talking', calm: 'Calm', close: 'Getting close', loud: 'Too loud'}[zone];
+    const st = $('vstate');
+    if (st.lastElementChild.textContent !== label) { st.lastElementChild.textContent = label; st.firstElementChild.style.background = zone === 'quiet' ? '' : COLORS[zone]; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

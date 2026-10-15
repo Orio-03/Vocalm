@@ -101,7 +101,8 @@ class Server:
         return {
             "token": self.token, "app": APP_NAME, "version": __version__, "port": self.port,
             "settings": self.core.settings_dict(), "firstRun": not cfg.setup_done,
-            "legacy": json.loads(legacy[0]) if legacy else None, "dataDir": paths.DATA,
+            "legacy": json.loads(legacy[0]) if legacy else None,
+            "dataDir": getattr(paths, "SHOWN_DATA", None) or paths.DATA,
             "autostart": {"supported": autostart.supported(), "enabled": autostart.enabled()},
         }
 

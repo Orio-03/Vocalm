@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.3] - 2026-10-15
+
+- **A website:** [orio-03.github.io/Vocalm](https://orio-03.github.io/Vocalm/), with the bar filmed over a game, a
+  tour of the dashboard, and a *Try it* section that runs the bar on your own voice right in the page (nothing is
+  recorded or sent anywhere).
+- **A new README**, with videos of the bar and the dashboard, a step-by-step start, and answers to common questions.
+- **Fixed:** on the dashboard, the last red peak's label could sit on top of the big level readout.
+- **Fixed:** the bars under *Where you talked today* and *Where you get loud* didn't all start at the same place.
+- **Fixed:** the *Beside the bar* choice in Settings was cut off.
+- **For developers:** `python -m vocalm --demo` runs Vocalm with a scripted voice and made-up history, beside your
+  own copy, and `packaging/media/make_media.py` makes every screenshot and video from it, so none of them ever
+  show anyone's real history.
+
 ## [0.1.2] - 2026-10-15
 
 - **High-pitched shouts now count.** Loudness is measured the way ears hear it (A-weighted, like a dB(A) sound
