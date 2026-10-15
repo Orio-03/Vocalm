@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vocalm</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/app.css?v=__V__">
+<script id="boot" type="application/json">__VOCALM_BOOT__</script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/live"><img src="/favicon.svg" alt="" width="32" height="32"><span class="word">Vocalm</span><span class="ver" id="ver"></span></a>
+  <nav class="tabs" aria-label="Sections">
+    <a href="#/live" data-tab="live">Live</a>
+    <a href="#/insights" data-tab="insights">Insights</a>
+    <a href="#/settings" data-tab="settings">Settings</a>
+  </nav>
+  <div class="spacer"></div>
+  <a class="chip" id="cliptrove" href="#" target="_blank" rel="noopener" hidden title="ClipTrove is running on this PC">ClipTrove<svg viewBox="0 0 24 24" class="ic sm" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+  <span class="conn" id="conn" title="Connection to Vocalm"><i></i><span>Connecting</span></span>
+  <button class="icon-btn" id="theme" type="button" title="Light / dark"><svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+</header>
+<div class="banner" id="banner" role="status" hidden></div>
+
+<main class="page">
+<!-- ============================== LIVE ============================== -->
+<section id="view-live" class="view" hidden>
+  <div class="card welcome" id="welcome" hidden>
+    <img src="/favicon.svg" alt="" width="46" height="46">
+    <div>
+      <h2>Welcome to Vocalm</h2>
+      <p id="welcomeText">Vocalm listens to your microphone and shows a small bar on your screen: green while you're calm, amber as you get close to your line, red when you're over it. Nothing is recorded, only how loud you were and when.</p>
+    </div>
+    <div class="welcome-actions">
+      <a class="btn primary" href="#/settings/calibrate">Calibrate my voice</a>
+      <button class="btn" type="button" id="welcomeDone">Looks good</button>
+    </div>
+  </div>
+
+  <div class="page-head">
+    <div><span class="eyebrow">Right now</span><h1 id="liveTitle">Listening</h1></div>
+  </div>
+
+  <div class="card hero">
+    <div class="hero-main">
+      <div class="hero-head">
+        <span class="status" id="status" data-zone="quiet"><i></i><span>Not talking</span></span>
+        <span class="level"><span id="levelNum">–</span><span class="unit">dBFS</span></span>
+      </div>
+      <div class="meter" id="meter" role="meter" aria-label="Your current level" aria-valuemin="-90" aria-valuemax="0">
+        <div class="meter-zones" id="meterZones"></div>
+        <div class="meter-fill" id="meterFill"></div>
+        <div class="meter-peak" id="markPeak" hidden><span></span></div>
+        <div class="meter-mark normal" id="markNormal"><span>normal</span></div>
+        <div class="meter-mark line" id="markLine"><span>your line</span></div>
+      </div>
+      <div class="spark-wrap">
+        <canvas id="spark" aria-label="Your level over the last 30 seconds"></canvas>
+        <div class="spark-label"><span class="label">30 seconds ago</span><span class="label">now</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn" type="button" id="btnPause"><svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M9 6v12M15 6v12"/></svg><span>Pause</span></button>
+        <button class="btn" type="button" id="btnOverlay"><svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><rect x="3" y="9" width="18" height="6" rx="3"/></svg><span>Hide bar</span></button>
+        <button class="btn" type="button" id="btnMove"><svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg><span>Move bar</span></button>
+        <button class="btn" type="button" id="btnNudge"><svg viewBox="0 0 24 24" class="ic" aria-hidden="true"><path d="M4 12c4-6 12-6 16 0M4 12c4 6 12 6 16 0"/></svg><span>Preview the breathe card</span></button>
+      </div>
+    </div>
+    <aside class="hero-side">
+      <div class="label">Calm streak</div>
+      <div class="hero-figure" id="streak">–</div>
+      <div class="sub">since your last loud moment</div>
+      <div class="side-rows">
+        <div><span class="label">Right now in</span><b id="nowApp">–</b></div>
+        <div><span class="label">This run</span><b id="runInfo">–</b></div>
+        <div><span class="label">Microphone</span><b id="micInfo">–</b></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="kpis" id="todayKpis"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-head"><h3>Today's loud moments</h3><span class="count" id="todayCount"></span></div>
+      <ol class="moments" id="todayList"></ol>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Where you talked today</h3></div>
+      <div id="todayApps"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== INSIGHTS ============================== -->
+<section id="view-insights" class="view" hidden>
+  <div class="page-head">
+    <div>
+      <span class="eyebrow" id="rangeLabel">History</span>
+      <h1>Insights</h1>
+      <p class="lede">How loud you've been, when, and where, and whether it's getting better.</p>
+    </div>
+    <div class="seg" id="range" role="group" aria-label="Time range">
+      <button type="button" data-days="7">7 days</button>
+      <button type="button" data-days="30">30 days</button>
+      <button type="button" data-days="90">90 days</button>
+      <button type="button" data-days="0">All</button>
+    </div>
+  </div>
+
+  <div class="card verdict" id="verdict"></div>
+  <div class="kpis" id="rangeKpis"></div>
+
+  <div class="card chart-card" id="cardDaily">
+    <div class="card-head">
+      <div><h3>Loud moments per day</h3><p class="sub">Times you stayed over your line for more than a moment.</p></div>
+      <button class="btn sm" type="button" data-table="daily">Table</button>
+    </div>
+    <div class="chart" id="chartDaily"></div>
+  </div>
+
+  <div class="card chart-card" id="cardRate">
+    <div class="card-head">
+      <div><h3>Loud moments per hour of talking</h3><p class="sub">The fair comparison: it doesn't go up just because you played longer. Lower is calmer.</p></div>
+      <button class="btn sm" type="button" data-table="rate">Table</button>
+    </div>
+    <div class="chart" id="chartRate"></div>
+  </div>
+
+  <div class="card chart-card">
+    <div class="card-head"><div><h3>When you get loud</h3><p class="sub">Loud moments by day of the week and hour.</p></div></div>
+    <div class="chart" id="chartHeat"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-head"><div><h3>Where you get loud</h3><p class="sub">The app or game in front while you talked.</p></div></div>
+      <div id="apps"></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Loudest moments</h3></div>
+      <ol class="moments dated" id="loudest"></ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><h3>Runs</h3><span class="count">Each time Vocalm was running</span></div>
+    <div class="table-wrap" id="sessions"></div>
+  </div>
+</section>
+
+<!-- ============================== SETTINGS ============================== -->
+<section id="view-settings" class="view" hidden>
+  <div class="page-head">
+    <div>
+      <span class="eyebrow">Vocalm</span>
+      <h1>Settings</h1>
+      <p class="lede">Your line, the bar and everything else. Changes save as you make them.</p>
+    </div>
+  </div>
+
+  <div class="card calib" id="calibrate">
+    <div class="card-head"><div><h3>Calibrate your voice</h3><p class="sub">Two short passes set your line from your own voice, through your own microphone.</p></div></div>
+    <div class="calib-body">
+      <ol class="steps" id="calibSteps">
+        <li data-step="1">Talk normally</li>
+        <li data-step="2">Talk too loud</li>
+        <li data-step="3">Your line</li>
+      </ol>
+      <div class="calib-stage" id="calibStage"></div>
+      <div class="mini-meter" id="calibMeter"><div class="meter-fill"></div><div class="meter-mark line"></div></div>
+    </div>
+  </div>
+
+  <div class="settings-grid">
+    <div class="card">
+      <h3>Your line</h3>
+      <div class="field">
+        <label for="sThreshold"><span>Too loud from</span><b id="vThreshold"></b></label>
+        <input type="range" id="sThreshold" min="-60" max="-3" step="0.1">
+        <div class="mini-meter" id="lineMeter"><div class="meter-fill"></div><div class="meter-mark line"></div><div class="meter-mark normal"></div></div>
+        <p class="hint">Talk and watch: the fill is your voice right now, the line is where it turns red. Your normal voice is <b id="vNormal"></b>.</p>
+      </div>
+      <div class="field">
+        <label for="sSustain"><span>A loud moment after</span><b id="vSustain"></b></label>
+        <input type="range" id="sSustain" min="0.5" max="5" step="0.1">
+        <p class="hint">Shorter catches more; longer ignores laughs and quick shouts.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>The bar</h3>
+      <label class="switch"><input type="checkbox" id="sOverlay"><span></span>Show the bar on screen</label>
+      <div class="field">
+        <label for="sBarLabel"><span>Beside the bar</span></label>
+        <select class="select" id="sBarLabel">
+          <option value="peak">Your last peak (how loud your last sentence got)</option>
+          <option value="streak">Your calm streak</option>
+          <option value="off">Nothing</option>
+        </select>
+      </div>
+      <label class="switch"><input type="checkbox" id="sPeakMarker"><span></span>Mark your last peak on the bar</label>
+      <div class="field">
+        <label for="sWidth"><span>Width</span><b id="vWidth"></b></label>
+        <input type="range" id="sWidth" min="80" max="480" step="10">
+      </div>
+      <div class="field">
+        <label for="sOpacity"><span>Opacity</span><b id="vOpacity"></b></label>
+        <input type="range" id="sOpacity" min="0.3" max="1" step="0.05">
+      </div>
+      <div class="field">
+        <label for="sCorner"><span>Corner, until you move it yourself</span></label>
+        <select class="select" id="sCorner">
+          <option value="top-right">Top right</option><option value="top-left">Top left</option>
+          <option value="top-center">Top center</option><option value="bottom-right">Bottom right</option>
+          <option value="bottom-left">Bottom left</option>
+        </select>
+      </div>
+      <div class="row">
+        <button class="btn" type="button" data-action="move">Move bar</button>
+        <button class="btn" type="button" data-action="reset_position">Back to the corner</button>
+      </div>
+      <p class="hint">Move bar makes it follow your mouse, anywhere on any monitor, taskbar included; press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>B</kbd> to drop it. Games must be in borderless or windowed mode for any overlay to show.</p>
+    </div>
+
+    <div class="card">
+      <h3>Breathe card</h3>
+      <label class="switch"><input type="checkbox" id="sNudge"><span></span>Show a breathe card after a loud moment</label>
+      <div class="field">
+        <label for="sCooldown"><span>At most once every</span><b id="vCooldown"></b></label>
+        <input type="range" id="sCooldown" min="10" max="300" step="5">
+      </div>
+      <button class="btn" type="button" data-action="test_nudge">Preview it</button>
+    </div>
+
+    <div class="card">
+      <h3>Microphone</h3>
+      <div class="field">
+        <label for="sDevice"><span>Listen to</span></label>
+        <select class="select" id="sDevice"></select>
+        <p class="hint" id="deviceHint"></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>App</h3>
+      <label class="switch" id="autostartRow"><input type="checkbox" id="sAutostart"><span></span>Start with Windows</label>
+      <label class="switch"><input type="checkbox" id="sTrack"><span></span>Note which app or game is in front</label>
+      <p class="hint">Only the program's name is kept (like "VALORANT"), never window titles. It's what powers <i>Where you get loud</i>.</p>
+      <div class="keys" id="hotkeys"></div>
+    </div>
+
+    <div class="card">
+      <h3>Your data</h3>
+      <p class="hint">Everything stays on this PC. No account, no uploads, no audio.</p>
+      <p class="mono path" id="dataDir"></p>
+      <div class="row">
+        <button class="btn" type="button" data-action="open_data">Open the folder</button>
+        <a class="btn" id="exportCsv" href="#" download>Export loud moments (CSV)</a>
+      </div>
+      <p class="hint" id="legacyNote"></p>
+    </div>
+  </div>
+  <p class="foot" id="foot"></p>
+</section>
+</main>
+
+<div class="tip" id="tip" role="tooltip" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="/app.js?v=__V__"></script>
+</body>
+</html>
