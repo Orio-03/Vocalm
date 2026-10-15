@@ -18,9 +18,46 @@ PREFERRED_HOSTAPIS = ["Windows WASAPI", "Windows DirectSound", "MME"]
 
 
 def dbfs(block):
-    """RMS level of a block of float samples, in dBFS (0 = full scale)."""
+    """RMS level of a block of float samples, in dBFS (0 = full scale). Raw energy, every frequency equal."""
     rms = float(np.sqrt(np.mean(np.square(block, dtype=np.float64))))
     return 20.0 * math.log10(max(rms, 1e-12))
+
+
+def a_weight_power(freqs):
+    """The A-weighting curve (IEC 61672) as power gains, 1.0 at 1 kHz."""
+    f2 = np.square(np.asarray(freqs, dtype=np.float64))
+    ra = (12194.0 ** 2 * f2 ** 2) / ((f2 + 20.6 ** 2) * np.sqrt((f2 + 107.7 ** 2) * (f2 + 737.9 ** 2))
+                                    * (f2 + 12194.0 ** 2))
+    return np.square(ra) * 10 ** (2.0 / 10)  # the +2.00 dB that puts 1 kHz at 0 dB
+
+
+class Perceived:
+    """Level the way ears hear it: A-weighted RMS in dBFS.
+
+    Raw energy is dominated by the low end of a voice, but hearing is far more sensitive around 2-4 kHz, so a
+    high-pitched shout sounds much louder than its raw energy says. This weights each block's spectrum by the
+    A-curve (the one sound level meters use for dB(A)) before adding the energy up. One FFT per ~11 ms block.
+    """
+
+    def __init__(self):
+        self._cache = {}
+
+    def _prepare(self, n, rate):
+        key = (n, rate)
+        if key not in self._cache:
+            window = 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(n) / n)   # Hann: keeps a deep voice's energy from
+            weights = a_weight_power(np.fft.rfftfreq(n, 1.0 / rate))   # smearing into the bins that get boosted
+            weights[1:(n + 1) // 2] *= 2.0                              # each inner bin stands for two
+            scale = 1.0 / (n * float(np.sum(window ** 2)))             # Parseval, undoing the window's loss
+            self._cache = {key: (window, weights, scale)}
+        return self._cache[key]
+
+    def level(self, block, rate):
+        x = block.mean(axis=1) if block.ndim == 2 else block
+        window, weights, scale = self._prepare(len(x), rate)
+        spectrum = np.fft.rfft(x * window)
+        power = float(np.dot(weights, spectrum.real ** 2 + spectrum.imag ** 2)) * scale
+        return 10.0 * math.log10(max(power, 1e-24))
 
 
 def input_devices():
@@ -106,12 +143,24 @@ class LevelMeter:
         self.error = ""
         self.last_callback = 0.0
         self._stream = None
+        self._rate = 48000.0
         self._attack = self._release = 0.0
         self._capture = None         # calibration: raw block levels while capturing
         self._lock = threading.Lock()
+        self._perceived = Perceived()
+        # Switching an older setup over to perceived loudness: (perceived - flat) for blocks of actual talking, so
+        # the line can be moved by the typical difference and your normal voice stays as far under it as before.
+        self.switch_floor = None     # set by the core while a switch-over is under way
+        self.switch_diffs = []
 
     def _callback(self, indata, frames, time_info, status):
-        db = dbfs(indata)
+        flat = dbfs(indata)
+        if self.cfg.loudness == "flat":
+            db = flat
+            if self.switch_floor is not None and flat > self.switch_floor and len(self.switch_diffs) < 20000:
+                self.switch_diffs.append(self._perceived.level(indata, self._rate) - flat)
+        else:
+            db = self._perceived.level(indata, self._rate)
         coef = self._attack if db > self.level else self._release
         self.level = db if self.level <= -119.0 else coef * self.level + (1.0 - coef) * db
         self.last_callback = time.monotonic()
@@ -124,6 +173,7 @@ class LevelMeter:
         """Open the microphone. Call on the main thread. Raises RuntimeError if nothing opens."""
         self.stop()
         self._stream, self.label, rate = open_stream(self.cfg, self._callback)
+        self._rate = rate
         block = self.cfg.blocksize / rate
         self._attack = math.exp(-block / max(self.cfg.attack_ms / 1000.0, 1e-4))
         self._release = math.exp(-block / max(self.cfg.release_ms / 1000.0, 1e-4))
@@ -143,6 +193,9 @@ class LevelMeter:
     @property
     def running(self):
         return self._stream is not None
+
+    def blocks_per_second(self):
+        return self._rate / max(1, self.cfg.blocksize)
 
     def stalled(self, seconds=3.0):
         """True when the device has stopped delivering audio, e.g. a headset was unplugged."""

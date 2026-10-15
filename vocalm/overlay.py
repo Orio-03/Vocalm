@@ -7,6 +7,7 @@ replaced (never edited) every frame.
 """
 import queue
 import random
+import statistics
 import time
 import tkinter as tk
 from dataclasses import asdict
@@ -34,6 +35,9 @@ COLORS = {
 }
 FONT = "Bahnschrift"         # ships with Windows 10 and 11; Tk falls back to the default font if it's missing
 LABEL_GAP = 6                # between the bar and its readout
+PILL_PAD_L, PILL_DOT, PILL_GAP, PILL_PAD_R = 9, 6, 6, 10
+BAR_HEADROOM_DB = 15.0       # how far past your line the bar's scale reaches
+SWITCH_SECONDS = 45.0       # talking needed to work out how far to move an older line to perceived loudness
 NUDGES = ["Take a breath.", "Ease off a little.", "Drop it a notch.", "Breathe, lower the volume.", "Soften up.",
           "You're spiking. Settle."]
 CALIBRATION_SECONDS = {"normal": 10.0, "loud": 5.0}
@@ -62,6 +66,8 @@ class Core:
         self.watcher = winapi.ForegroundWatcher()
         self.app_name = ""
         self.tracker = Tracker(cfg, now)
+        self.switch_result = None     # when an older line was moved over to perceived loudness, by how much
+        self._arm_switch()
         self.session_id = store.start_session(self.tracker.session_record(now))
         self.paused = False
         self.move_mode = False
@@ -119,19 +125,24 @@ class Core:
         if not self.cfg.overlay_visible:
             self.bar.withdraw()
 
-    def _label_width(self):
-        """Room for the readout beside the bar, measured in the real font so nothing is ever clipped."""
-        if self.cfg.bar_label == "off":
-            return 0
+    def _fonts(self):
         if not hasattr(self, "_label_fonts"):
             from tkinter import font as tkfont
             self._label_fonts = (tkfont.Font(family=FONT, size=10, weight="bold"), tkfont.Font(family=FONT, size=8))
-        bold, small = self._label_fonts
+        return self._label_fonts
+
+    def _pill_width(self, text, small):
+        """The readout's pill hugs its text: padding, dot, gap, text, padding."""
+        bold, light = self._fonts()
+        return PILL_PAD_L + PILL_DOT + PILL_GAP + bold.measure(text) + light.measure(small) + PILL_PAD_R
+
+    def _label_width(self):
+        """Room kept beside the bar for the widest readout, so the window never has to resize as it changes."""
+        if self.cfg.bar_label == "off":
+            return 0
         if self.cfg.bar_label == "peak":
-            widest = max(bold.measure("-88.8") + small.measure(" dB"), small.measure("quiet"))
-        else:
-            widest = small.measure("calm ") + max(bold.measure(t) for t in ("23h 59m", "99d 23h", "<1m"))
-        return 8 + 6 + 6 + widest + 12  # padding, dot, gap, text, padding
+            return self._pill_width("-88.8", " dB")
+        return max(self._pill_width(t, "calm ") for t in ("23h 59m", "99d 23h", "<1m"))
 
     def _bar_size(self):
         g = self.cfg.bar_grow_px
@@ -189,27 +200,31 @@ class Core:
     # ---------- drawing ----------
 
     def _fraction(self, level):
-        lo = min(self.cfg.normal_dbfs - 15.0, self.cfg.gate_dbfs)
-        hi = self.cfg.threshold_dbfs + 6.0
+        """Where a level sits on the bar: from where talking starts to 15 dB past your line. The room past the line
+        is what lets the red-peak needle show how far over you went, instead of every peak piling up at the end."""
+        lo = self.tracker.floor()
+        hi = self.cfg.threshold_dbfs + BAR_HEADROOM_DB
         return 0.0 if hi <= lo else max(0.0, min(1.0, (level - lo) / (hi - lo)))
 
+    def _peak_showing(self, now):
+        return self.tracker.red_peak_showing(now, self.cfg.bar_info_timeout_s)
+
     def _label(self, now):
-        """(text, small text, dot colour) for the readout beside the bar."""
+        """(text, small text, dot colour) for the readout beside the bar, or None for no readout."""
         if self.cfg.bar_label == "streak":
             # Whole minutes only: seconds ticking next to your game would pull your eye every second
             return compact_duration(self.tracker.calm_streak(now)), "calm ", COLORS["calm"]
-        peak = self.tracker.last_peak
-        if peak is None:
-            return "", "quiet", COLORS["quiet"]
+        if not self._peak_showing(now):
+            return None  # nothing went red lately: nothing to say, so nothing takes up room
         # A plain hyphen: Bahnschrift's minus sign is as wide as a dash and reads as one at this size
-        return f"{peak:.1f}", " dB", COLORS[self.tracker.zone_of(peak)]
+        return f"{self.tracker.red_peak:.1f}", " dB", COLORS["loud"]
 
     def _draw_bar(self, level, zone, now):
         mode = ("move" if self.move_mode else "nomic" if not self.meter.running else
                 "paused" if self.paused or self.calib["phase"] else zone)
         live = mode in ("quiet", "calm", "close", "loud")
         fraction = round(self._fraction(level), 3) if live else 0
-        peak = self.tracker.last_peak if live and self.cfg.bar_peak_marker else None
+        peak = self.tracker.red_peak if live and self.cfg.bar_peak_marker and self._peak_showing(now) else None
         peak_at = round(self._fraction(peak), 3) if peak is not None else None
         label = self._label(now) if self.cfg.bar_label != "off" else None
         key = (fraction, mode, peak_at, label)
@@ -243,7 +258,7 @@ class Core:
             tick = x1 + w * self._fraction(self.cfg.threshold_dbfs)  # where "too loud" starts
             c.create_line(tick, y1 + 2, tick, y2 - 2, fill=COLORS["tick"], width=1)
             if peak_at is not None and peak_at > 0.004:
-                # The needle: where your last burst of talking peaked. Pokes out above and below the bar so it
+                # The needle: how far past the line you went last time. Pokes out above and below the bar so it
                 # reads differently from the line's tick.
                 px = min(x2 - 2, max(x1 + 2, x1 + w * peak_at))
                 c.create_rectangle(px - 1, max(0, y1 - 3), px + 1, min(win_h, y2 + 3), fill=COLORS["peak"],
@@ -255,20 +270,25 @@ class Core:
         text, small, dot = label
         if mode in ("move", "paused", "nomic"):
             dot = COLORS["quiet"]
-        bold, light = self._label_fonts
+        bold, light = self._fonts()
         pill_h = min(win_h, max(18, self.cfg.bar_height + 6))
         top = (win_h - pill_h) / 2.0
-        rounded_rect(c, x, top, x + self._label_width(), top + pill_h, pill_h / 2.0, fill=COLORS["card"],
-                     outline=COLORS["edge"])
         cy = win_h / 2.0
-        c.create_oval(x + 8, cy - 3, x + 14, cy + 3, fill=dot, outline=dot)
-        tx = x + 20
-        if self.cfg.bar_label == "streak":  # "calm 12m": the small word first
-            c.create_text(tx, cy, anchor="w", text=small, fill=COLORS["card_sub"], font=light)
-            c.create_text(tx + light.measure(small), cy, anchor="w", text=text, fill=COLORS["card_text"], font=bold)
-        else:                               # "−12.4 dB": the number first
-            c.create_text(tx, cy, anchor="w", text=text, fill=COLORS["card_text"], font=bold)
-            c.create_text(tx + bold.measure(text), cy + 1, anchor="w", text=small, fill=COLORS["card_sub"], font=light)
+        rounded_rect(c, x, top, x + self._pill_width(text, small), top + pill_h, pill_h / 2.0, fill=COLORS["card"],
+                     outline=COLORS["edge"])
+        c.create_oval(x + PILL_PAD_L, cy - PILL_DOT / 2, x + PILL_PAD_L + PILL_DOT, cy + PILL_DOT / 2, fill=dot,
+                      outline=dot)
+        # Both sizes sit on one baseline (centring each on its own would leave the small text floating), with the
+        # big text's line box centred in the pill
+        baseline = cy - (bold.metrics("ascent") + bold.metrics("descent")) / 2.0 + bold.metrics("ascent")
+        parts = [(small, light, COLORS["card_sub"]), (text, bold, COLORS["card_text"])]
+        if self.cfg.bar_label != "streak":
+            parts.reverse()  # "-12.4 dB": number first; "calm 12m": word first
+        tx = x + PILL_PAD_L + PILL_DOT + PILL_GAP
+        for content, font, colour in parts:
+            if content:
+                c.create_text(tx, baseline - font.metrics("ascent"), anchor="nw", text=content, fill=colour, font=font)
+                tx += font.measure(content)
 
     # ---------- the breathe card ----------
 
@@ -430,8 +450,34 @@ class Core:
         if restart:
             self.open_mic()
         self._drawn = None
+        self._arm_switch()
         if reply is not None:
             reply.put(asdict(new))
+
+    # ---------- switching an older line over to perceived loudness ----------
+
+    def _arm_switch(self):
+        """While measuring flat, have the meter collect how perceived loudness differs during your talking."""
+        self.meter.switch_floor = self.tracker.floor() if self.cfg.loudness == "flat" else None
+
+    def _switch_needed(self):
+        return SWITCH_SECONDS * self.meter.blocks_per_second()
+
+    def _check_switch(self, now):
+        """Once there's enough talking to go on, move the line (and normal voice) by the typical difference between
+        the two measures. Your normal voice then sits exactly as far under the line as before; what changes is that
+        sharp, high-pitched sounds now count as loud as they sound."""
+        if self.cfg.loudness != "flat" or len(self.meter.switch_diffs) < self._switch_needed():
+            return
+        offset = round(statistics.median(self.meter.switch_diffs), 1)
+        self.meter.switch_diffs = []
+        before = self.cfg.threshold_dbfs
+        self._record(self.tracker.interrupt(now))  # a loud moment mustn't straddle two ways of measuring
+        self.apply_settings({"threshold_dbfs": before + offset, "normal_dbfs": self.cfg.normal_dbfs + offset,
+                             "loudness": "perceived"})
+        self.switch_result = {"from": before, "to": self.cfg.threshold_dbfs, "offset": offset, "at": now}
+        print(f"Switched to perceived loudness: your line moved {before:+.1f} -> {self.cfg.threshold_dbfs:+.1f} dB "
+              f"({offset:+.1f} dB, the typical difference while you talked)")
 
     def calibration(self, action):
         c = self.calib
@@ -532,6 +578,7 @@ class Core:
         if now - self._last["session"] >= SAVE_SESSION_EVERY:
             self._last["session"] = now
             self.store.save_session(self.session_id, self.tracker.session_record(now))
+        self._check_switch(now)
         if now - self._last["mic"] >= MIC_RETRY_EVERY:
             self._last["mic"] = now
             if self.meter.stalled() and not self.calib["phase"]:
@@ -553,8 +600,13 @@ class Core:
         t = self.tracker
         self.live = {
             "t": now, "db": round(level, 1), "zone": zone, "paused": self.paused,
-            "lastPeak": round(t.last_peak, 1) if t.last_peak is not None else None,
-            "lastPeakZone": t.zone_of(t.last_peak), "onTaskbar": self._on_taskbar,
+            "redPeak": round(t.red_peak, 1) if t.red_peak is not None else None,
+            "redPeakAgo": round(now - t.red_peak_at) if t.red_peak_at is not None else None,
+            "redPeakShowing": self._peak_showing(now), "infoTimeout": self.cfg.bar_info_timeout_s,
+            "onTaskbar": self._on_taskbar,
+            "loudness": {"mode": self.cfg.loudness, "switched": self.switch_result,
+                         "progress": round(min(1.0, len(self.meter.switch_diffs) / self._switch_needed()), 3)
+                         if self.cfg.loudness == "flat" else None},
             "streak": round(t.calm_streak(now)), "app": self.app_name if self.cfg.track_apps else "",
             "eventSeq": self.event_seq, "moveMode": self.move_mode, "overlay": self.cfg.overlay_visible,
             "threshold": self.cfg.threshold_dbfs, "normal": self.cfg.normal_dbfs, "gate": self.cfg.gate_dbfs,

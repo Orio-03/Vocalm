@@ -11,7 +11,9 @@ matched against later (a clip has a time; the minute it was recorded has your le
 import time
 from dataclasses import dataclass
 
-BURST_GAP_S = 1.2  # this much silence ends a burst of talking; the next word starts a new "last peak"
+# Times over the line closer together than this are one episode: a shout with a breath in the middle is one red
+# peak, not two. A red moment after a longer gap starts a new one.
+RED_MERGE_S = 3.0
 # Talking starts this far under your calibrated normal voice. Below it is keyboard, breathing and room noise, which
 # the gate alone (set for silence) lets through, and which would otherwise count as talking time.
 SPEECH_BELOW_NORMAL_DB = 18.0
@@ -50,10 +52,10 @@ class Tracker:
         self.event_peak = -120.0
         self.event_app = ""
         self.buckets = {}          # (minute, app) -> Bucket
-        # The highest point of your latest burst of talking. It stays put once you stop, so the bar can show where
-        # your last sentence peaked rather than a number that keeps sliding around while you play.
-        self.last_peak = None
-        self.quiet_for = BURST_GAP_S
+        # The loudest point of the last time you went over your line (the bar went red), and when that was. Green
+        # and amber peaks aren't kept: the bar only has something to tell you when you've actually been too loud.
+        self.red_peak = None
+        self.red_peak_at = None
 
     # ---------- reading ----------
 
@@ -74,13 +76,11 @@ class Tracker:
     def calm_streak(self, now):
         return max(0.0, now - (self.last_event_at or self.started))
 
-    def zone_of(self, level):
-        """Which zone a level falls in, ignoring whether you're over the line right now (for the last peak)."""
-        if level is None or level <= self.floor():
-            return "quiet"
-        if level >= self.cfg.threshold_dbfs:
-            return "loud"
-        return "close" if level >= self.cfg.threshold_dbfs - 6.0 else "calm"
+    def red_peak_showing(self, now, timeout_s):
+        """Whether the last red peak is still recent enough to show. timeout_s 0 means it never goes away."""
+        if self.red_peak is None:
+            return False
+        return timeout_s <= 0 or now - self.red_peak_at <= timeout_s
 
     # ---------- advancing ----------
 
@@ -104,15 +104,6 @@ class Tracker:
             self.hot = False
 
         if speaking:
-            if self.quiet_for >= BURST_GAP_S or self.last_peak is None:
-                self.last_peak = level  # a new burst
-            else:
-                self.last_peak = max(self.last_peak, level)
-            self.quiet_for = 0.0
-        else:
-            self.quiet_for += elapsed
-
-        if speaking:
             self.speaking_s += elapsed
             self.peak_dbfs = max(self.peak_dbfs, level)
             bucket = self._bucket(now, app)
@@ -121,6 +112,11 @@ class Tracker:
             bucket.peak_dbfs = max(bucket.peak_dbfs, level)
 
         if self.hot and speaking:
+            if self.red_peak is None or now - self.red_peak_at > RED_MERGE_S:
+                self.red_peak = level  # a new time over the line
+            else:
+                self.red_peak = max(self.red_peak, level)
+            self.red_peak_at = now
             self.over_s += elapsed
             bucket.over_s += elapsed
             if self.over_duration == 0.0:

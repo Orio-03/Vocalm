@@ -6,7 +6,9 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from vocalm import calibrate, settings  # noqa: E402
+import numpy as np  # noqa: E402
+
+from vocalm import audio, calibrate, settings  # noqa: E402
 from vocalm.tracker import Tracker, minute_key  # noqa: E402
 
 STEP = 0.25
@@ -36,7 +38,7 @@ class TrackerTest(unittest.TestCase):
         # normal voice -31 dB: talking starts 18 dB under it, at -49, even though the gate is at -60
         self.assertEqual(self.tr.floor(), -49.0)
         run(self.tr, -55, 10, self.t0)
-        self.assertEqual((self.tr.speaking_s, self.tr.last_peak, self.tr.zone(-55)), (0, None, "quiet"))
+        self.assertEqual((self.tr.speaking_s, self.tr.zone(-55)), (0, "quiet"))
         run(self.tr, -45, 1, self.t0 + 10)
         self.assertEqual(self.tr.speaking_s, 1.0)
 
@@ -86,29 +88,67 @@ class TrackerTest(unittest.TestCase):
         self.assertEqual([k for k, _ in sig], ["event"])
         self.assertFalse(self.tr.hot)
 
-    def test_last_peak_is_the_top_of_the_latest_burst(self):
-        self.assertIsNone(self.tr.last_peak)
-        _, t = run(self.tr, -30, 1, self.t0)
-        _, t = run(self.tr, -14, 0.5, t)          # the loudest part of the sentence
-        _, t = run(self.tr, -28, 1, t)
-        self.assertEqual(self.tr.last_peak, -14)
-        _, t = run(self.tr, -80, 0.75, t)         # a short pause: same burst
-        _, t = run(self.tr, -25, 0.5, t)
-        self.assertEqual(self.tr.last_peak, -14)
-        _, t = run(self.tr, -80, 2, t)            # a real pause: it stays put while you're quiet...
-        self.assertEqual(self.tr.last_peak, -14)
-        _, t = run(self.tr, -26, 0.5, t)          # ...and the next sentence starts a new one
-        self.assertEqual(self.tr.last_peak, -26)
-        self.assertEqual(self.tr.zone_of(-26), "calm")
-        self.assertEqual(self.tr.zone_of(-15), "close")
-        self.assertEqual(self.tr.zone_of(-9), "loud")
-        self.assertEqual(self.tr.zone_of(None), "quiet")
+    def test_only_red_peaks_are_kept(self):
+        _, t = run(self.tr, -30, 2, self.t0)       # calm (green)
+        _, t = run(self.tr, -15, 2, t)             # close to the line (amber): still nothing
+        self.assertIsNone(self.tr.red_peak)
+        _, t = run(self.tr, -11, 0.5, t)           # over the line: red
+        _, t = run(self.tr, -6, 0.25, t)           # its top
+        _, t = run(self.tr, -11, 0.25, t)
+        self.assertEqual(self.tr.red_peak, -6)
+
+    def test_red_moments_close_together_are_one_peak(self):
+        _, t = run(self.tr, -6, 0.5, self.t0)
+        _, t = run(self.tr, -30, 1.5, t)           # a breath, then red again
+        _, t = run(self.tr, -10, 0.5, t)
+        self.assertEqual(self.tr.red_peak, -6)     # still the shout's top, not the lower second burst
+        _, t = run(self.tr, -30, 10, t)            # a real gap...
+        _, t = run(self.tr, -10, 0.5, t)           # ...and the next time over the line is its own peak
+        self.assertEqual(self.tr.red_peak, -10)
+
+    def test_red_peak_goes_away_after_the_timer(self):
+        _, t = run(self.tr, -6, 0.5, self.t0)
+        self.assertTrue(self.tr.red_peak_showing(t + 299, 300))
+        self.assertFalse(self.tr.red_peak_showing(t + 301, 300))
+        self.assertTrue(self.tr.red_peak_showing(t + 10 ** 6, 0))   # 0 = never hide
+        self.assertFalse(Tracker(self.cfg, self.t0).red_peak_showing(self.t0, 0))
 
     def test_calm_streak(self):
         self.assertEqual(self.tr.calm_streak(self.t0 + 100), 100)
         _, t = run(self.tr, -5, 2, self.t0 + 100)
         self.assertLess(self.tr.calm_streak(t), 1)
         self.assertEqual(self.tr.longest_calm_s, 101.5)
+
+
+class PerceivedLoudnessTest(unittest.TestCase):
+    """A-weighting checked against its published values, with pure tones through the real code path."""
+
+    RATE, N = 48000.0, 512
+
+    def level(self, freq, amplitude=0.3):
+        t = np.arange(self.N) / self.RATE
+        block = (amplitude * np.sin(2 * np.pi * freq * t + 0.3)).astype(np.float32)
+        return audio.Perceived().level(block[:, None], self.RATE), audio.dbfs(block)
+
+    def test_1_khz_is_unchanged(self):
+        perceived, flat = self.level(1000)
+        self.assertAlmostEqual(perceived, flat, delta=0.4)
+
+    def test_high_pitch_counts_more_and_low_rumble_less(self):
+        # IEC 61672: +1.2 dB at 2.5 kHz, -8.6 dB at 250 Hz. A tone's FFT smears a little, so allow some slack.
+        p, f = self.level(2500)
+        self.assertAlmostEqual(p - f, 1.3, delta=0.6)
+        p, f = self.level(250)
+        self.assertAlmostEqual(p - f, -8.6, delta=1.5)
+        # A squeal at 3 kHz and a deep 150 Hz voice with the same raw energy: the squeal now reads far louder
+        self.assertGreater(self.level(3000)[0] - self.level(150)[0], 12)
+
+    def test_curve_shape(self):
+        w = 10 * np.log10(audio.a_weight_power([100, 1000, 4000, 10000]))
+        np.testing.assert_allclose(w, [-19.1, 0.0, 1.0, -2.5], atol=0.15)
+
+    def test_silence(self):
+        self.assertLess(audio.Perceived().level(np.zeros((512, 2), np.float32), 48000.0), -200)
 
 
 class CompactDurationTest(unittest.TestCase):
@@ -164,6 +204,29 @@ class SettingsTest(unittest.TestCase):
 
     def test_half_a_position_is_dropped(self):
         self.assertIsNone(settings.normalize({"pos_x": 5}).pos_x)
+
+    def test_peak_timer(self):
+        self.assertEqual(settings.normalize({}).bar_info_timeout_s, 300)
+        self.assertEqual(settings.normalize({"bar_info_timeout_s": 0}).bar_info_timeout_s, 0)      # never
+        self.assertEqual(settings.normalize({"bar_info_timeout_s": 3}).bar_info_timeout_s, 10)     # too short
+        self.assertEqual(settings.normalize({"bar_info_timeout_s": -5}).bar_info_timeout_s, 0)
+        self.assertEqual(settings.normalize({"bar_info_timeout_s": 1e9}).bar_info_timeout_s, 86400)
+
+    def test_older_setups_measure_flat_until_switched(self):
+        import json
+        import tempfile
+        from vocalm import paths
+        folder = tempfile.mkdtemp(prefix="vocalm-settings-")
+        try:
+            paths.configure(folder)
+            with open(paths.SETTINGS, "w", encoding="utf-8") as f:
+                json.dump({"threshold_dbfs": -24.1}, f)                 # saved by 0.1.1: no "loudness" yet
+            self.assertEqual(settings.load()[0].loudness, "flat")
+            settings.save(settings.normalize({"loudness": "perceived"}))
+            self.assertEqual(settings.load()[0].loudness, "perceived")
+            self.assertEqual(settings.Settings().loudness, "perceived")  # a brand-new setup starts perceived
+        finally:
+            paths.configure()
 
     def test_bar_label_choices(self):
         self.assertEqual(settings.normalize({"bar_label": "streak"}).bar_label, "streak")

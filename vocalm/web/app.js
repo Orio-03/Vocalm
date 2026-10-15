@@ -225,10 +225,10 @@
 
   // The meter's scale: from a bit under your normal voice to a bit over your line
   function domain() {
+    // Same scale as the bar: from where talking starts to 15 dB past your line
     const thr = live ? live.threshold : settings.threshold_dbfs;
-    const normal = live ? live.normal : settings.normal_dbfs;
-    const gate = live ? live.gate : settings.gate_dbfs;
-    return [Math.min(normal - 18, gate + 5), Math.min(0, thr + 12)];
+    const floor = live ? live.floor : Math.max(settings.gate_dbfs, settings.normal_dbfs - 18);
+    return [floor, Math.min(0, thr + 15)];
   }
   const frac = (db) => { const [lo, hi] = domain(); return clamp((db - lo) / (hi - lo), 0, 1); };
   const zoneColor = (zone) => ({calm: css.good, close: css.warn, loud: css.bad}[zone] || css.faint);
@@ -254,9 +254,14 @@
     }
     renderZones();
     const peak = $('markPeak');
-    const showPeak = live.lastPeak !== null && live.mic.ok && !live.paused && !live.calib.phase;
+    // Same rule as the bar: only a peak that went red, and only until your timer runs out
+    const showPeak = live.redPeakShowing && live.mic.ok && !live.paused && !live.calib.phase;
     peak.hidden = !showPeak;
-    if (showPeak) placeMark(peak, live.lastPeak, `last peak ${fmtDb(live.lastPeak)}`);
+    if (showPeak) {
+      const ago = live.redPeakAgo < 60 ? 'just now' : `${Math.floor(live.redPeakAgo / 60)} min ago`;
+      placeMark(peak, live.redPeak, `last red peak ${fmtDb(live.redPeak)} · ${ago}`);
+    }
+    if (route() === 'settings') renderLoudnessNote();
     $('nowApp').textContent = live.app || (settings.track_apps ? '–' : 'Not tracked');
     const sess = live.session;
     $('runInfo').textContent = `${fmtDurShort(sess.talk_s)} talking · ${sess.loud} loud`;
@@ -786,6 +791,7 @@
     for (const [id, key] of CHECKS) $(id).checked = !!settings[key];
     $('sCorner').value = settings.corner;
     $('sBarLabel').value = settings.bar_label;
+    fillTimeout();
     $('vNormal').textContent = fmtDb(settings.normal_dbfs) + ' dBFS';
     $('sAutostart').checked = !!autostartInfo.enabled;
     $('autostartRow').hidden = !autostartInfo.supported;
@@ -814,6 +820,44 @@
   $('sCorner').addEventListener('change', (e) => queueSave({corner: e.target.value, pos_x: null, pos_y: null}, true));
   $('sDevice').addEventListener('change', (e) => queueSave({device_query: e.target.value}, true));
   $('sBarLabel').addEventListener('change', (e) => queueSave({bar_label: e.target.value}, true));
+
+  // ---------- how long a red peak stays on the bar ----------
+  const PRESETS = ['60', '300', '600', '900', '0'];
+  function fillTimeout() {
+    const v = String(Math.round(settings.bar_info_timeout_s));
+    const custom = !PRESETS.includes(v);
+    if (document.activeElement !== $('sInfoCustom')) {
+      $('sInfoTimeout').value = custom ? 'custom' : v;
+      $('sInfoCustom').value = Math.max(1, Math.round(settings.bar_info_timeout_s / 60));
+    }
+    $('customTimeoutWrap').hidden = !custom && $('sInfoTimeout').value !== 'custom';
+  }
+  $('sInfoTimeout').addEventListener('change', (e) => {
+    const custom = e.target.value === 'custom';
+    $('customTimeoutWrap').hidden = !custom;
+    if (custom) { $('sInfoCustom').focus(); queueSave({bar_info_timeout_s: (+$('sInfoCustom').value || 20) * 60}, true); }
+    else queueSave({bar_info_timeout_s: +e.target.value}, true);
+  });
+  $('sInfoCustom').addEventListener('input', (e) => {
+    const minutes = Math.round(+e.target.value);
+    if (minutes >= 1 && minutes <= 1440) queueSave({bar_info_timeout_s: minutes * 60});
+  });
+
+  function renderLoudnessNote() {
+    const l = live && live.loudness;
+    if (!l) return;
+    let text;
+    if (l.mode === 'flat') {
+      text = 'Switching to perceived loudness, so high-pitched shouts count as loud as they sound: ' +
+        `${Math.round(l.progress * 100)}% (it needs about a minute of talking), then your line is moved to match.`;
+    } else if (l.switched) {
+      text = `Measured the way ears hear it (A-weighted). On switching over, your line moved from ` +
+        `${fmtDb(l.switched.from)} to ${fmtDb(l.switched.to)} dB to keep your normal voice the same distance under it.`;
+    } else {
+      text = 'Measured the way ears hear it (A-weighted), so high-pitched shouts count as loud as they sound.';
+    }
+    if ($('loudnessNote').textContent !== text) $('loudnessNote').textContent = text;
+  }
   $('sAutostart').addEventListener('change', async (e) => {
     try {
       const r = await api('/api/action', {action: e.target.checked ? 'autostart_on' : 'autostart_off'});

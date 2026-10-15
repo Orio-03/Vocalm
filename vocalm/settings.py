@@ -21,6 +21,10 @@ class Settings:
     samplerate: Optional[int] = None          # None = the device's own rate
     blocksize: int = 512                      # ~11 ms at 48 kHz
 
+    # perceived: weighted the way ears hear (A-weighting), so a high-pitched shout counts as loud as it sounds.
+    # flat: raw energy, what versions before 0.1.2 measured; an existing setup is switched over automatically.
+    loudness: str = "perceived"
+
     # --- levels (dBFS) ---
     threshold_dbfs: float = -24.0             # the "too loud for my friends" line
     normal_dbfs: float = -31.0                # your calm speaking level (set by calibration)
@@ -42,8 +46,9 @@ class Settings:
     bar_height: int = 14
     bar_grow_px: int = 6
     opacity: float = 0.85
-    bar_label: str = "peak"                   # next to the bar: peak (your last peak) | streak (calm streak) | off
-    bar_peak_marker: bool = True              # a small mark on the bar where your last peak reached
+    bar_label: str = "peak"                   # next to the bar: peak (last red peak) | streak (calm streak) | off
+    bar_peak_marker: bool = True              # a small mark on the bar where your last red peak reached
+    bar_info_timeout_s: float = 300.0         # the red peak's mark and readout go away this long after; 0 = never
 
     # --- the breathe card ---
     nudge_enabled: bool = True
@@ -65,8 +70,9 @@ RANGES = {
     "sustain_seconds": (0.3, 10.0), "margin_px": (0, 400), "bar_width": (60, 600), "bar_height": (6, 60),
     "bar_grow_px": (0, 30), "opacity": (0.2, 1.0), "nudge_cooldown_s": (5.0, 600.0),
     "nudge_duration_s": (1.0, 20.0), "port": (1024, 65535), "pos_x": (-100000, 100000),
-    "pos_y": (-100000, 100000), "samplerate": (8000, 384000),
+    "pos_y": (-100000, 100000), "samplerate": (8000, 384000), "bar_info_timeout_s": (0.0, 86400.0),
 }
+LOUDNESS = ("perceived", "flat")
 BLOCKSIZES = (128, 256, 512, 1024, 2048)
 TYPES = {f.name: f.type for f in fields(Settings)}
 NULLABLE = {"samplerate", "pos_x", "pos_y"}  # None is a real value for these ("use the default")
@@ -110,6 +116,10 @@ def normalize(data, base=None):
         out.corner = "top-right"
     if out.bar_label not in BAR_LABELS:
         out.bar_label = "peak"
+    if out.loudness not in LOUDNESS:
+        out.loudness = "perceived"
+    if 0 < out.bar_info_timeout_s < 10:
+        out.bar_info_timeout_s = 10.0
     if out.blocksize not in BLOCKSIZES:
         out.blocksize = 512
     if out.threshold_dbfs <= out.gate_dbfs:
@@ -123,7 +133,10 @@ def load():
     """(settings, is_new). is_new is True the very first time, before settings.json exists."""
     try:
         with open(paths.SETTINGS, encoding="utf-8") as f:
-            return normalize(json.load(f)), False
+            data = json.load(f)
+        if isinstance(data, dict) and "loudness" not in data:
+            data["loudness"] = "flat"  # calibrated before 0.1.2: measured flat until the switch-over adjusts the line
+        return normalize(data), False
     except FileNotFoundError:
         return Settings(), True
     except (OSError, ValueError) as e:
@@ -146,5 +159,5 @@ def from_legacy(folder):
             old = json.load(f)
     except (OSError, ValueError):
         return None
-    # Same names in both, apart from the app-level ones that didn't exist before
-    return normalize({k: v for k, v in old.items() if k in TYPES})
+    # Same names in both, apart from the app-level ones that didn't exist before. Its line was set on raw energy.
+    return normalize(dict({k: v for k, v in old.items() if k in TYPES}, loudness="flat"))

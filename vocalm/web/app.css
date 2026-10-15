@@ -86,6 +86,10 @@ kbd{font-family:var(--display);font-size:11.5px;font-weight:600;padding:1px 7px;
 .count{font-family:var(--display);color:var(--faint);font-size:13px;font-weight:500}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.row.tight{margin-top:0;flex-wrap:nowrap;align-items:center}
+.row.tight .select{flex:1}
+.custom{display:flex;align-items:center;gap:6px;flex:none}
+.custom input{width:80px}
 .foot{color:var(--faint);font-size:12.5px;text-align:center;margin:10px 0 0;font-family:var(--display);letter-spacing:.02em}
 .empty{color:var(--faint);font-size:13.5px;padding:10px 0;max-width:62ch}
 

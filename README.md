@@ -63,13 +63,18 @@
 Vocalm listens to one microphone (by default *SteelSeries Sonar - Microphone*, the processed signal Discord sends)
 and measures its level in dBFS, where 0 is the loudest a microphone can record. It never records or stores audio.
 
+- **Loudness is weighted the way ears hear it** (A-weighting, as in dB(A)). Hearing is far more sensitive around
+  2-4 kHz than to the low end of a voice, so a high-pitched shout counts as loud as it sounds, not as loud as its
+  raw energy.
+
 - **Your line** is where the bar turns red. Calibration puts it 45% of the way from your normal voice to your
   too-loud voice, and never closer than 6 dB above your normal voice, because speech swings that much between words.
 - **A loud moment** is staying over your line for 1.5 seconds in a row (adjustable).
 - **Talking** starts 18 dB under your normal voice, so keyboard clatter, breathing and room noise don't count as
   talking time or show up as your last peak.
-- **Your last peak** is the loudest point of your latest burst of talking. The bar marks it with a small needle and
-  shows it beside the bar, and it stays put until you speak again.
+- **Your last red peak** is the loudest point of the last time you went over your line. The bar marks it with a
+  small needle and shows it beside the bar, then clears it after the time you choose (5 minutes unless you change
+  it). Green and amber peaks are never shown: the bar only speaks up when you've been too loud.
 - **Loud moments per hour of talking** is the fair comparison between days and games: it doesn't go up just because
   you played longer. Vocalm adds up your talking time minute by minute and per app to work it out.
 
