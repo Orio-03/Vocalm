@@ -73,6 +73,32 @@ A small bar appears in the top-right corner of your main screen, a tray icon app
 > [!NOTE]
 > **Seeing "Windows protected your PC"?** Windows shows this for new apps that haven't paid for a code-signing certificate. Click **More info**, then **Run anyway**. You only need to do this once. Only download Vocalm from this page's [Releases](https://github.com/Orio-03/Vocalm/releases).
 
+> [!WARNING]
+> **Blocked by Smart App Control, with no Run anyway?** Smart App Control (on by default on some new Windows 11 PCs) blocks every app that isn't code-signed, and Vocalm.exe isn't yet. You can still run Vocalm: run it from its source with Python, which is signed, so Smart App Control allows it. See [Run it without the .exe](#run-it-without-the-exe).
+
+<a id="run-it-without-the-exe"></a>
+
+<details>
+<summary><b>Run it without the .exe (for Smart App Control)</b></summary>
+
+<br>
+
+1. Install [Python](https://www.python.org/downloads/) 3.10 or newer (tick **Add python.exe to PATH**) and [Git](https://git-scm.com/downloads).
+2. Open PowerShell and run:
+
+   ```
+   git clone https://github.com/Orio-03/Vocalm.git
+   cd Vocalm
+   python -m pip install -r requirements.txt
+   python packaging/install_local.py --from-source --autostart --desktop-shortcut
+   ```
+
+3. Double-click the **Vocalm** shortcut on your desktop. It's the same app, with the same settings and history; to update it later, run `git pull` in that folder.
+
+You could instead turn Smart App Control off in **Windows Security → App & browser control**, but Windows can't turn it back on afterwards without resetting the PC, so running from source is the better choice.
+
+</details>
+
 ### 3. Calibrate your voice
 
 In the dashboard, open **Settings** and click **Start** under *Calibrate your voice*. Talk normally for 10 seconds, then at the volume a friend would wince at for 5. Vocalm puts your line between the two, through your own microphone.

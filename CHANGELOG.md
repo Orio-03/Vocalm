@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Runs where Smart App Control is on.** Smart App Control blocks unsigned programs, Vocalm.exe included, with no
+  way to run them anyway. `python packaging/install_local.py --from-source` points Vocalm's shortcuts (desktop,
+  Start menu, start with Windows) at the source run by your own Python, which is signed and allowed. The README,
+  the website and the zip's *Read me* now explain this.
+
 ## [0.1.3] - 2026-10-15
 
 - **A website:** [orio-03.github.io/Vocalm](https://orio-03.github.io/Vocalm/), with the bar filmed over a game, a

@@ -22,7 +22,9 @@ Keeps your voice in check while you game.
 
 1. Double-click Vocalm.exe. A small bar appears on your screen, a tray icon appears by the clock,
    and your browser opens the dashboard at http://127.0.0.1:{DEFAULT_PORT}
-   (Windows may say it "protected your PC" the first time: click "More info", then "Run anyway").
+   (Windows may say it "protected your PC" the first time: click "More info", then "Run anyway".
+   If Smart App Control blocks it with no "Run anyway", run Vocalm from its source with Python instead:
+   https://github.com/Orio-03/Vocalm#run-it-without-the-exe)
 2. In the dashboard, open Settings and calibrate your voice (15 seconds).
 3. Optional: turn on "Start with Windows" in Settings or in the tray menu.
 
