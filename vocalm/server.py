@@ -17,7 +17,7 @@ import urllib.request
 from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import APP_NAME, __version__, autostart, paths, store
+from . import APP_NAME, __version__, autostart, games, paths, store
 from .audio import device_choices
 
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
@@ -217,6 +217,10 @@ def make_handler(server):
                 if path == "/api/today":
                     with closing(store.connect(paths.DB)) as db:
                         return self._json(store.today_summary(db))
+                if path == "/api/games":
+                    days = int((query.get("days") or ["0"])[0])
+                    with closing(store.connect(paths.DB)) as db:
+                        return self._json(games.report(db, days))
                 if path == "/api/overview":
                     days = int((query.get("days") or ["30"])[0])
                     with closing(store.connect(paths.DB)) as db:

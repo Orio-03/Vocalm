@@ -3,6 +3,7 @@
   events    one row per loud moment: when, how loud, how long, the line at the time, the app in front
   minutes   per minute and app: talking time, time over the line, average and peak level, loud moments
   sessions  one row per run of Vocalm, saved every 30 s so a shutdown or crash loses almost nothing
+  clips     ClipTrove's clips: game and when you saved each one (see games.py)
 
 Writes go through one background thread, so a slow disk can never make the bar stutter. The dashboard reads
 with its own short-lived connections; WAL mode lets both happen at once.
@@ -32,6 +33,8 @@ CREATE TABLE IF NOT EXISTS minutes(
     minute TEXT NOT NULL, app TEXT NOT NULL DEFAULT '', speaking_s REAL DEFAULT 0, over_s REAL DEFAULT 0,
     db_sum REAL DEFAULT 0, peak_dbfs REAL, loud_events INTEGER DEFAULT 0, threshold_dbfs REAL,
     PRIMARY KEY(minute, app));
+CREATE TABLE IF NOT EXISTS clips(key TEXT PRIMARY KEY, game TEXT NOT NULL, saved TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS clips_saved ON clips(saved);
 """
 
 

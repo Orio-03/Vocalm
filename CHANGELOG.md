@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Games, with ClipTrove.** A new page shows, for each game, how far over your line you go, how often, and whether
+  you're getting calmer (the last two weeks against the four before, with a projection when the trend is steady).
+  It also lists your ClipTrove clips, each marked calm or with how many dB over your line you were in the 90 seconds
+  before you saved it. The game comes from the app in front, or from your clips. An app that's always in front when
+  you clip a game is learned to be that game (`cs2` is *Counter-Strike 2*). Loud moments in Discord, or from the
+  old script, which never noted apps, count for the game you were clipping at the time. Vocalm copies only each
+  clip's game and time, and keeps them even if ClipTrove is closed or the clip is deleted.
 - **Fixed:** a damaged history file made Insights say *Couldn't load your history* for good. Vocalm now checks
   the file as it starts and, if it's damaged, rebuilds it from everything still readable. The damaged file is
   kept beside it as `vocalm.damaged-<time>.db`.

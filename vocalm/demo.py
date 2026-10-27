@@ -3,6 +3,7 @@
 A scripted voice instead of a microphone, and two and a half months of made-up history in made-up games, in a
 throwaway data folder. Nothing from your own history is ever shown, and the same pictures come out every time.
 """
+import json
 import math
 import os
 import random
@@ -35,10 +36,13 @@ def demo_settings(port):
 
 # ---------- the made-up history ----------
 
-def make_history(db_path, today=None, seed=7):
+def make_history(db_path, today=None, seed=7, cliptrove=None):
     """Fill a fresh database with believable, made-up history: evenings and weekends, a few games, and a voice that
-    slowly gets calmer (the story the Insights page is there to tell)."""
+    slowly gets calmer (the story the Insights page is there to tell). With `cliptrove` (a folder), also write a
+    made-up ClipTrove clip list there, a clip every half hour of play or so, for the Games page."""
     rng = random.Random(seed)
+    clip_rng = random.Random(seed + 1)  # its own, so the history is the same with or without clips
+    clips = []
     today = today or date.today()
     store.init(db_path)
     events, minutes, sessions = [], {}, []
@@ -84,6 +88,10 @@ def make_history(db_path, today=None, seed=7):
                                        line, app))
                     talked += talk
                     loud += n_loud
+                for _ in range(clip_rng.randint(0, max(1, length // 25))):
+                    saved = t + timedelta(minutes=clip_rng.uniform(1, length))
+                    if saved < datetime.now():
+                        clips.append((game, saved))
                 t += timedelta(minutes=length + rng.randint(2, 10))
             sessions.append((run_start, t, talked, loud))
 
@@ -101,6 +109,13 @@ def make_history(db_path, today=None, seed=7):
             [(s.strftime("%Y-%m-%dT%H:%M:%S"), e.strftime("%Y-%m-%dT%H:%M:%S"), (e - s).total_seconds(), talk, n,
               (e - s).total_seconds() / max(1, n + 1), LINE) for s, e, talk, n in sessions])
         db.commit()
+    if cliptrove:
+        os.makedirs(cliptrove, exist_ok=True)
+        snapshot = {f"{saved:%Y-%m-%dT%H:%M:%S}|demo{i}": {
+            "title": "", "file": "", "game": game, "recorded": saved.astimezone().isoformat(timespec="seconds")}
+            for i, (game, saved) in enumerate(clips)}
+        with open(os.path.join(cliptrove, "library.json"), "w", encoding="utf-8") as f:
+            json.dump({"snapshot": snapshot}, f)
     return len(events)
 
 
@@ -112,7 +127,9 @@ def prepare(port):
     # The dashboard shows its data folder; demo footage is public, so show a generic one, not your user name
     paths.SHOWN_DATA = r"C:\Users\you\AppData\Local\Vocalm"
     settings.save(demo_settings(port))
-    make_history(paths.DB)
+    # Made-up ClipTrove clips too: the Games page must never read your real ClipTrove in a demo
+    os.environ["CLIPTROVE_DATA"] = os.path.join(folder, "Cliptrove")
+    make_history(paths.DB, cliptrove=os.environ["CLIPTROVE_DATA"])
     return folder
 
 

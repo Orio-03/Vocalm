@@ -14,6 +14,7 @@
   <nav class="tabs" aria-label="Sections">
     <a href="#/live" data-tab="live">Live</a>
     <a href="#/insights" data-tab="insights">Insights</a>
+    <a href="#/games" data-tab="games">Games</a>
     <a href="#/settings" data-tab="settings">Settings</a>
   </nav>
   <div class="spacer"></div>
@@ -147,6 +148,60 @@
     <div class="card-head"><h3>Runs</h3><span class="count">Each time Vocalm was running</span></div>
     <div class="table-wrap" id="sessions"></div>
   </div>
+</section>
+
+<!-- ============================== GAMES ============================== -->
+<section id="view-games" class="view" hidden>
+  <div class="page-head">
+    <div>
+      <span class="eyebrow" id="gRangeLabel">With ClipTrove</span>
+      <h1>Games</h1>
+      <p class="lede">Where you get loud, game by game, how far over your line you go, and whether you're getting calmer.</p>
+    </div>
+    <div class="seg" id="gRange" role="group" aria-label="Time range">
+      <button type="button" data-days="30">30 days</button>
+      <button type="button" data-days="90">90 days</button>
+      <button type="button" data-days="0">All</button>
+    </div>
+  </div>
+
+  <div class="card verdict" id="gVerdict"></div>
+  <div class="kpis" id="gKpis"></div>
+
+  <div class="card chart-card">
+    <div class="card-head">
+      <div><h3 id="gWeeksTitle">Week by week</h3><p class="sub" id="gWeeksSub"></p></div>
+      <div class="head-tools">
+        <div class="seg sm" id="gMetric" role="group" aria-label="Measure">
+          <button type="button" data-metric="overDb">How far over</button>
+          <button type="button" data-metric="rate">How often</button>
+        </div>
+        <button class="btn sm" type="button" data-gtable="weeks">Table</button>
+      </div>
+    </div>
+    <div class="chart" id="chartWeeks"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div><h3>Game by game</h3><p class="sub">Bars: how far over your line you go in each game, on average. Lower is calmer.</p></div>
+      <button class="btn sm" type="button" data-gtable="games">Table</button>
+    </div>
+    <div id="gGames"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-head"><div><h3>Your clips</h3><p class="sub">Your voice in the 90 seconds before you saved each clip.</p></div></div>
+      <ol class="moments dated clipcheck" id="gClips"></ol>
+    </div>
+    <div class="card">
+      <div class="card-head"><div><h3>Furthest over your line</h3><p class="sub">In a game, by how many dB.</p></div></div>
+      <ol class="moments dated" id="gLoudest"></ol>
+    </div>
+  </div>
+
+  <p class="hint" id="gSource"></p>
 </section>
 
 <!-- ============================== SETTINGS ============================== -->

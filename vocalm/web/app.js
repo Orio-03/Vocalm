@@ -6,6 +6,7 @@
   let autostartInfo = BOOT.autostart || {};
   let live = null;
   let overview = null;
+  let gamesData = null;
   const tableMode = {daily: false, rate: false};
 
   // ================= helpers =================
@@ -158,6 +159,7 @@
     store.set('theme', theme);
     readColors();
     if (overview && route() === 'insights') renderInsights();
+    if (gamesData && route() === 'games') renderGames();
   }
   setTheme(store.get('theme', matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
   $('theme').addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
@@ -167,15 +169,16 @@
   // ================= routing =================
   function route() {
     const m = location.hash.match(/^#\/(\w+)/);
-    return m && ['live', 'insights', 'settings'].includes(m[1]) ? m[1] : 'live';
+    return m && ['live', 'insights', 'games', 'settings'].includes(m[1]) ? m[1] : 'live';
   }
   function show() {
     const r = route();
-    for (const v of ['live', 'insights', 'settings']) $('view-' + v).hidden = v !== r;
+    for (const v of ['live', 'insights', 'games', 'settings']) $('view-' + v).hidden = v !== r;
     document.querySelectorAll('.tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === r));
     hideTip();
     if (r === 'live') loadToday();
     if (r === 'insights') loadOverview();
+    if (r === 'games') loadGames();
     if (r === 'settings') {
       fillSettings();
       loadDevices();
@@ -749,8 +752,265 @@
   let resizeTimer;
   addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { if (overview && route() === 'insights') renderInsights(); }, 150);
+    resizeTimer = setTimeout(() => {
+      if (overview && route() === 'insights') renderInsights();
+      if (gamesData && route() === 'games') renderGames();
+    }, 150);
   });
+
+  // ================= games (with ClipTrove) =================
+  let gDays = +store.get('gdays', '0');
+  let gMetric = store.get('gmetric', 'overDb');
+  const gTable = {weeks: false, games: false};
+  document.querySelectorAll('#gRange button').forEach((b) => b.addEventListener('click', () => {
+    gDays = +b.dataset.days;
+    store.set('gdays', String(gDays));
+    loadGames();
+  }));
+  document.querySelectorAll('#gMetric button').forEach((b) => b.addEventListener('click', () => {
+    gMetric = b.dataset.metric;
+    store.set('gmetric', gMetric);
+    renderGames();
+  }));
+  document.querySelectorAll('[data-gtable]').forEach((b) => b.addEventListener('click', () => {
+    gTable[b.dataset.gtable] = !gTable[b.dataset.gtable];
+    b.textContent = gTable[b.dataset.gtable] ? 'Chart' : 'Table';
+    renderGames();
+  }));
+
+  async function loadGames() {
+    document.querySelectorAll('#gRange button').forEach((b) => b.classList.toggle('on', +b.dataset.days === gDays));
+    $('chartWeeks').classList.add('loading');
+    try {
+      gamesData = await api('/api/games?days=' + gDays);
+    } catch (e) {
+      banner("Couldn't work out your games: " + e.message, true);
+      return;
+    } finally {
+      $('chartWeeks').classList.remove('loading');
+    }
+    renderGames();
+  }
+
+  const fmtOver = (v) => (v === null || v === undefined) ? '–' : '+' + v.toFixed(1);
+  const TREND = {better: ['Calmer', 'good'], worse: ['Louder', 'bad'], same: ['Steady', '']};
+  function trendChip(v) {
+    if (!v) return null;
+    const [label, cls] = TREND[v.trend];
+    const change = v.change === null ? '' : ` ${v.change < 0 ? '↓' : '↑'}${Math.abs(v.change)}%`;
+    return h('span', {class: 'trend ' + cls, text: label + (v.trend === 'same' ? '' : change),
+      title: `${v.unit}: ${fmtVerdictValue(v, v.before)} before → ${fmtVerdictValue(v, v.now)} lately`});
+  }
+  function fmtVerdictValue(v, x) {
+    return v.metric === 'overDb' ? fmtOver(x) + ' dB' : v.metric === 'clipShare' ? x + '%' : x.toFixed(1);
+  }
+
+  function renderGames() {
+    const g = gamesData;
+    if (!g) return;
+    const ct = g.cliptrove;
+    $('gRangeLabel').textContent = (g.range.start ? `${fmtDay(g.range.start)} – ${fmtDay(g.range.end)}` : 'All your history') +
+      (ct.found && ct.readable ? ` · ${fmtNum(ct.clips)} clips from ClipTrove` : '');
+    renderGamesVerdict(g);
+    const t = g.totals;
+    renderKpis($('gKpis'), [
+      {label: 'Loud moments in games', value: fmtNum(t.loud),
+       note: g.unplaced ? `${fmtNum(g.unplaced)} more outside any game` : ''},
+      {label: 'Over your line, on average', value: fmtOver(t.overDb), unit: 'dB',
+       note: t.worstOverDb ? `Furthest: ${fmtOver(t.worstOverDb)} dB` : ''},
+      {label: 'Clips with a loud moment', value: t.clipShare === null ? '–' : String(t.clipShare), unit: '%',
+       note: t.clipsHeard ? `${fmtNum(t.clipsLoud)} of ${fmtNum(t.clipsHeard)} clips Vocalm heard` : 'No clips from days Vocalm was listening'},
+      {label: 'Per hour of talking in games', value: t.rate === null ? '–' : t.rate.toFixed(1),
+       note: t.rate === null ? 'Needs 15 minutes of talking in games' : `${fmtDurShort(t.talk_s)} of talking`},
+    ]);
+    drawWeeks();
+    renderGameRows();
+    renderClipChecks();
+    renderGameLoudest();
+    renderGamesSource();
+  }
+
+  function renderGamesVerdict(g) {
+    const v = g.verdict, p = g.projection, per = g.periods;
+    let icon = 'M4 12h16', cls = '', big, sub;
+    if (v) {
+      const span = `the last ${per.recentDays} days against the ${per.beforeDays} before`;
+      if (v.trend === 'better') { big = 'You\'re getting calmer in your games'; cls = 'good'; icon = 'M6 9l6 6 6-6'; }
+      else if (v.trend === 'worse') { big = 'You\'ve been louder in your games lately'; cls = 'bad'; icon = 'M6 15l6-6 6 6'; }
+      else big = 'About as loud in your games as before';
+      sub = `${fmtVerdictValue(v, v.before)} → ${fmtVerdictValue(v, v.now)} ${v.unit} (${span}).`;
+      if (p && p.perWeek) {
+        sub += p.perWeek < 0
+          ? ` At this pace, about ${p.inFourWeeks.toFixed(1)} loud moments per hour of talking in four weeks (${p.now.toFixed(1)} now).`
+          : ` If nothing changes, about ${p.inFourWeeks.toFixed(1)} loud moments per hour of talking in four weeks (${p.now.toFixed(1)} now).`;
+      }
+    } else if (!g.cliptrove.found) {
+      big = 'ClipTrove isn\'t on this PC';
+      sub = 'Vocalm still names games from the app in front. With ClipTrove, your clips also tell it which game you were in, ' +
+            'and whether you were loud in each clip.';
+    } else {
+      big = 'Not enough games yet to compare';
+      sub = `This compares the last ${per.recentDays} days of gaming with the ${per.beforeDays} before. Keep Vocalm running while you play.`;
+    }
+    $('gVerdict').replaceChildren(
+      h('div', {class: 'badge ' + cls}, svgIcon(icon)),
+      h('div', null, h('div', {class: 'big', text: big}), h('p', {text: sub})));
+  }
+
+  function drawWeeks() {
+    const el = $('chartWeeks');
+    const weeks = gamesData.weeks;
+    document.querySelectorAll('#gMetric button').forEach((b) => b.classList.toggle('on', b.dataset.metric === gMetric));
+    const often = gMetric === 'rate';
+    $('gWeeksTitle').textContent = often ? 'How often you get loud, week by week' : 'How far over your line, week by week';
+    $('gWeeksSub').textContent = often
+      ? 'Loud moments per hour of talking in games (weeks with 15 minutes of talking). Lower is calmer.'
+      : 'How many dB over your line your loud moments in games went, on average. Lower is calmer.';
+    const value = (w) => (often ? w.rate : w.overDb);
+    if (gTable.weeks) {
+      el.replaceChildren(weeks.length ? table([
+        {label: 'Week of', get: (w) => fmtDayLong(w.week)},
+        {label: 'Loud moments', num: true, get: (w) => fmtNum(w.loud)},
+        {label: 'Over your line', num: true, get: (w) => w.overDb === null ? '–' : fmtOver(w.overDb) + ' dB'},
+        {label: 'Per hour of talking', num: true, get: (w) => w.rate === null ? '–' : w.rate.toFixed(1)},
+        {label: 'Clips with a loud moment', num: true, get: (w) => w.clipsHeard ? `${w.clipsLoud} of ${w.clipsHeard}` : '–'},
+      ], [...weeks].reverse()) : h('p', {class: 'empty', text: 'No gaming in this range yet.'}));
+      return;
+    }
+    const pts = weeks.map((w, i) => ({w, i})).filter((p) => value(p.w) !== null);
+    if (!pts.length) {
+      el.replaceChildren(h('p', {class: 'empty', text: often
+        ? 'Needs a week with at least 15 minutes of talking in a game. Vocalm counts talking time from v0.1 on.'
+        : 'No loud moments in games in this range.'}));
+      return;
+    }
+    const f = frameFor(el, 230);
+    const ax = axis(Math.max(...pts.map((p) => value(p.w)), 1), 4, false);
+    const svg = s('svg', {viewBox: `0 0 ${f.W} ${f.H}`, height: f.H, role: 'img',
+      'aria-label': `${$('gWeeksTitle').textContent}; use the Table button for the values`});
+    yAxis(svg, f, ax, (v) => (often ? String(v) : '+' + v));
+    const band = f.pw / weeks.length;
+    const bw = Math.max(1, Math.min(24, band - 2));
+    const cx = (i) => PAD.l + band * i + band / 2;
+    const yv = (v) => PAD.t + f.ph - (v / ax.top) * f.ph;
+    const bars = s('g');
+    for (const p of pts) {
+      const x = cx(p.i) - bw / 2, y = yv(value(p.w)), hgt = PAD.t + f.ph - y;
+      const rr = Math.min(4, bw / 2, hgt);
+      bars.append(s('path', {class: 'bar', 'data-i': p.i,
+        d: `M${x},${y + hgt}V${y + rr}Q${x},${y} ${x + rr},${y}H${x + bw - rr}Q${x + bw},${y} ${x + bw},${y + rr}V${y + hgt}Z`}));
+    }
+    svg.append(bars);
+    const last = pts[pts.length - 1];
+    svg.append(s('text', {class: 'chart-text', x: Math.min(cx(last.i) + 8, f.W - 34), y: yv(value(last.w)) - 8,
+      text: often ? value(last.w).toFixed(1) : fmtOver(value(last.w))}));
+    xLabels(svg, f, weeks.map((w) => ({date: w.week})), cx);
+    const hits = s('g');
+    weeks.forEach((w, i) => {
+      const hit = s('rect', {class: 'hit', x: PAD.l + band * i, y: PAD.t, width: band, height: f.ph,
+        'aria-label': `Week of ${fmtDayLong(w.week)}`});
+      const bar = () => bars.querySelector(`[data-i="${i}"]`);
+      hoverable(hit, () => [`Week of ${fmtDayLong(w.week)}`, [
+        often ? ['Per hour of talking', w.rate === null ? '–' : w.rate.toFixed(1), true]
+              : ['Over your line', w.overDb === null ? '–' : fmtOver(w.overDb) + ' dB', true],
+        ['Loud moments', fmtNum(w.loud)],
+        ...(w.talk_s ? [['Talking', fmtDurShort(w.talk_s)]] : []),
+        ...(w.clipsHeard ? [['Clips with a loud moment', `${w.clipsLoud} of ${w.clipsHeard}`]] : []),
+      ]], () => bar() && bar().classList.add('hover'), () => bar() && bar().classList.remove('hover'));
+      hits.append(hit);
+    });
+    svg.append(hits);
+    el.replaceChildren(svg);
+  }
+
+  function renderGameRows() {
+    const el = $('gGames');
+    const games = gamesData.games;
+    if (!games.length) {
+      el.replaceChildren(h('p', {class: 'empty', text: 'No games in this range yet. Vocalm names a game from the app in ' +
+        'front, or from your ClipTrove clips.'}));
+      return;
+    }
+    const clipsText = (g) => (g.clipsHeard ? `${g.clipsLoud} of ${g.clipsHeard} clips loud` : 'no clips heard');
+    if (gTable.games) {
+      el.replaceChildren(table([
+        {label: 'Game', get: (g) => g.game},
+        {label: 'Loud moments', num: true, get: (g) => fmtNum(g.loud)},
+        {label: 'Over your line', num: true, get: (g) => g.overDb === null ? '–' : fmtOver(g.overDb) + ' dB'},
+        {label: 'Furthest', num: true, get: (g) => g.worstOverDb === null ? '–' : fmtOver(g.worstOverDb) + ' dB'},
+        {label: 'Per hour of talking', num: true, get: (g) => g.rate === null ? '–' : g.rate.toFixed(1)},
+        {label: 'Talking', num: true, get: (g) => g.talk_s ? fmtDurShort(g.talk_s) : '–'},
+        {label: 'Clips with a loud moment', num: true, get: (g) => g.clipsHeard ? `${g.clipsLoud} of ${g.clipsHeard}` : '–'},
+        {label: 'Lately', get: (g) => g.verdict ? TREND[g.verdict.trend][0] : '–'},
+      ], games));
+      return;
+    }
+    const max = Math.max(...games.map((g) => g.overDb || 0), 1);
+    el.replaceChildren(
+      h('div', {class: 'bars games'}, games.map((g) => {
+        const row = h('div', {class: 'barrow'},
+          h('span', {class: 'name'}, h('span', {class: 'title', text: g.game, title: g.game}),
+            h('span', {class: 'meta', text: `${fmtNum(g.loud)} loud · ${clipsText(g)}`})),
+          h('span', {class: 'track'}, g.overDb !== null ? barFill(g.overDb / max) : null),
+          h('span', {class: 'val'}, h('span', {text: g.overDb === null ? 'never over' : fmtOver(g.overDb) + ' dB'}),
+            trendChip(g.verdict)));
+        hoverable(row, () => [g.game, [
+          ['Over your line, on average', g.overDb === null ? '–' : fmtOver(g.overDb) + ' dB', true],
+          ['Furthest over', g.worstOverDb === null ? '–' : fmtOver(g.worstOverDb) + ' dB'],
+          ['Loud moments', fmtNum(g.loud)],
+          ...(g.rate !== null ? [['Per hour of talking', g.rate.toFixed(1)]] : []),
+          ...(g.talk_s ? [['Talking', fmtDurShort(g.talk_s)]] : []),
+          ['Clips with a loud moment', g.clipsHeard ? `${g.clipsLoud} of ${g.clipsHeard}` : '–'],
+          ...(g.byClips ? [['Placed by your clips', fmtNum(g.byClips) + ' loud moments']] : []),
+          ...(g.apps.length ? [['Known from', g.apps.join(', ')]] : []),
+          ...(g.verdict ? [['Lately', `${TREND[g.verdict.trend][0]}: ${fmtVerdictValue(g.verdict, g.verdict.before)} → ${fmtVerdictValue(g.verdict, g.verdict.now)}`]] : []),
+        ]]);
+        return row;
+      })),
+      h('p', {class: 'hint', text: 'Calmer / Louder compares the last two weeks of each game with the four before, on loud moments ' +
+        'per hour of talking where Vocalm has it, otherwise on how many of your clips had a loud moment, or how far over you went.'}));
+  }
+
+  function renderClipChecks() {
+    const el = $('gClips');
+    const rows = gamesData.clips;
+    if (!rows.length) {
+      el.replaceChildren(h('li', {class: 'empty', text: gamesData.cliptrove.found
+        ? 'No clips from days Vocalm was listening, in this range.'
+        : 'Your ClipTrove clips show up here, each with how loud you were in it.'}));
+      return;
+    }
+    el.replaceChildren(...rows.map((c) => h('li', null,
+      h('span', {class: 'when', text: `${fmtDay(c.saved)}, ${fmtTime(c.saved)}`}),
+      h('span', {class: 'what', text: c.game, title: c.game}),
+      h('span', {class: 'peak ' + (c.loud ? 'bad' : 'good')},
+        h('i', {class: 'dot', 'aria-hidden': 'true'}), c.loud ? (c.overDb === null ? 'Loud' : fmtOver(c.overDb) + ' dB') : 'Calm'),
+      h('span', {class: 'len', text: ''}))));
+  }
+
+  function renderGameLoudest() {
+    const rows = gamesData.loudest;
+    const el = $('gLoudest');
+    if (!rows.length) { el.replaceChildren(h('li', {class: 'empty', text: 'No loud moments in games in this range.'})); return; }
+    el.replaceChildren(...rows.map((r) => h('li', null,
+      h('span', {class: 'when', text: `${fmtDay(r.ts)}, ${fmtTime(r.ts)}`}),
+      h('span', {class: 'what', text: r.game, title: r.how === 'clips' ? 'Placed by your clips' : r.app}),
+      h('span', {class: 'peak', text: fmtOver(r.overDb) + ' dB'}),
+      h('span', {class: 'len', text: r.how === 'clips' ? 'clips' : ''}))));
+  }
+
+  function renderGamesSource() {
+    const ct = gamesData.cliptrove;
+    let text;
+    if (!ct.found) text = `ClipTrove wasn't found (looked in ${ct.folder}). Games come from the app in front only.`;
+    else if (!ct.readable) text = `ClipTrove's clip list in ${ct.folder} couldn't be read; showing the clips copied before.`;
+    else text = `${fmtNum(ct.clips)} clips copied from ClipTrove (game and time only)` +
+      (ct.synced ? `, last updated ${fmtDay(ct.synced)} ${fmtTime(ct.synced)}` : '') + '.';
+    if (gamesData.learned.length) {
+      text += ' Recognised from your clips: ' + gamesData.learned.map((l) => `${l.app} is ${l.game}`).join(', ') + '.';
+    }
+    $('gSource').textContent = text;
+  }
 
   // ================= settings =================
   const BIND = [

@@ -9,7 +9,7 @@ from datetime import date
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from vocalm import audio, demo, settings, store  # noqa: E402
+from vocalm import audio, demo, games, settings, store  # noqa: E402
 
 
 class DemoTest(unittest.TestCase):
@@ -25,6 +25,19 @@ class DemoTest(unittest.TestCase):
             self.assertTrue(set(demo.GAMES) & {a["app"] for a in o["apps"]})
             self.assertGreater(sum(map(sum, o["heatmap"])), 50)
             self.assertNotIn("", {a["app"] for a in o["apps"]})
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+
+    def test_history_fills_the_games_page_from_its_own_clips(self):
+        folder = tempfile.mkdtemp(prefix="vocalm-demo-test-")
+        try:
+            path, clips = os.path.join(folder, "vocalm.db"), os.path.join(folder, "Cliptrove")
+            demo.make_history(path, today=date(2026, 10, 15), cliptrove=clips)
+            with closing(store.connect(path)) as db:
+                g = games.report(db, 0, today=date(2026, 10, 15), cliptrove=clips)
+            self.assertEqual({x["game"] for x in g["games"]}, set(demo.GAMES))
+            self.assertGreater(g["totals"]["clipsHeard"], 20)
+            self.assertIsNotNone(g["verdict"])
         finally:
             shutil.rmtree(folder, ignore_errors=True)
 

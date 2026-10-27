@@ -12,6 +12,8 @@ is thrown away straight after. Nothing you say is saved, transcribed or sent any
   you talked, how long you were over your line and your average and peak level; and when Vocalm was running.
 - With *Note which app or game is in front* on (Settings), the **name of the program** in front while you talked,
   like "VALORANT" or "Discord". Never window titles, so nothing about what you're browsing, watching or typing.
+- With ClipTrove on your PC, the **game and time of each of your clips**, copied from ClipTrove's
+  `%LOCALAPPDATA%\Cliptrove\library.json` for the Games page. Never clip titles, files or anything else.
 - `vocalm.log`: start-up messages and errors.
 
 **Nothing leaves your PC.** There's no account and no telemetry. The dashboard is served only on `127.0.0.1`, so

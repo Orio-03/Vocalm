@@ -268,3 +268,28 @@ input[type=range]{width:100%;accent-color:var(--accent)}
   .page-head{flex-direction:column;align-items:flex-start}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---------- games ---------- */
+.head-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.seg.sm{border-radius:10px;padding:2px}
+.seg.sm button{padding:4px 10px;font-size:13px;border-radius:8px}
+.bars.games{gap:14px}
+.bars.games .barrow{grid-template-columns:minmax(120px,1.2fr) 2fr 190px}
+.barrow .name .title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.barrow .name .meta{display:block;font-weight:400;font-size:12.5px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.barrow .val{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.trend{font-family:var(--display);font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--line-2);color:var(--muted)}
+.trend.good{color:var(--good-text);border-color:color-mix(in oklab,var(--good) 45%,transparent)}
+.trend.bad{color:var(--bad-text);border-color:color-mix(in oklab,var(--bad) 45%,transparent)}
+.clipcheck .peak{display:inline-flex;align-items:center;gap:6px}
+.clipcheck .peak .dot{width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.clipcheck .peak.good .dot{background:var(--good)}
+.clipcheck .peak.bad .dot{background:var(--bad)}
+.clipcheck .peak.good{color:var(--good-text)}
+#gSource{margin:18px 2px 0}
+@media (max-width:760px){.bars.games .barrow{grid-template-columns:1fr 150px}.bars.games .barrow .track{display:none}}
+@media (max-width:640px){
+  .moments.dated li{grid-template-columns:auto 1fr auto;gap:10px}
+  .moments.dated .len{display:none}
+  #view-games .card-head{flex-wrap:wrap}
+}

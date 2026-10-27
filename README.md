@@ -179,6 +179,8 @@ A heatmap of loud moments by weekday and hour, the games you get loudest in (per
 
 </details>
 
+**Games** works with [ClipTrove](https://github.com/Orio-03/Cliptrove), if you have it. For each game, it shows how far over your line you go, how often, and whether you're getting calmer: the last two weeks against the four before, with a projection. It also lists your clips, each marked calm or with how many dB over your line you were in the 90 seconds before you saved it. The game comes from the app in front. Where that doesn't name it, your clips do: an app that's always in front when you clip *Counter-Strike 2* (`cs2`) is learned to be it. Loud moments in Discord, or from before Vocalm noted apps, count for the game you were clipping at the time. Vocalm copies only each clip's game and time from ClipTrove, keeps them in its own history and reads nothing else.
+
 ## How it measures
 
 Vocalm listens to one microphone (by default *SteelSeries Sonar - Microphone*, which is exactly what Discord sends) and measures its level in dBFS, where 0 is the loudest a microphone can record. It never records or stores audio.
@@ -244,7 +246,7 @@ Yes, for personal and other noncommercial use. See [License](#license).
 
 ## Where it's heading
 
-Vocalm notes which game is in front while you talk, minute by minute. That lines up with [Cliptrove](https://github.com/Orio-03/Cliptrove)'s clips, which are timed and named by game, so a later version can show how loud you were in each clip, compare your voice across games, and predict whether you're getting calmer. The dashboard already links to Cliptrove when it's running.
+The Games page is the first step in bringing Vocalm and [Cliptrove](https://github.com/Orio-03/Cliptrove) together. Next: ClipTrove's own prediction of which games you'll play next, alongside how loud you tend to get in each.
 
 ## For developers
 
