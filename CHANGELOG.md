@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Fixed:** a damaged history file made Insights say *Couldn't load your history* for good. Vocalm now checks
+  the file as it starts and, if it's damaged, rebuilds it from everything still readable. The damaged file is
+  kept beside it as `vocalm.damaged-<time>.db`.
 - **Runs where Smart App Control is on.** Smart App Control blocks unsigned programs, Vocalm.exe included, with no
   way to run them anyway. `python packaging/install_local.py --from-source` points Vocalm's shortcuts (desktop,
   Start menu, start with Windows) at the source run by your own Python, which is signed and allowed. The README,

@@ -41,6 +41,69 @@ def connect(path):
     return db
 
 
+def healthy(path):
+    """True unless SQLite finds damage in the file (a missing file is fine: it gets created)."""
+    if not os.path.exists(path):
+        return True
+    try:
+        with closing(sqlite3.connect(path, timeout=15)) as db:
+            return db.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+    except sqlite3.DatabaseError:
+        return False
+
+
+def repair(path):
+    """Move a damaged history aside and copy everything still readable into a fresh one.
+
+    Returns (where the damaged file went, rows saved per table). The damaged file is kept, never deleted."""
+    base, ext = os.path.splitext(path)
+    damaged = f"{base}.damaged-{time.strftime('%Y%m%d-%H%M%S')}{ext}"
+    for suffix in ("", "-wal", "-shm"):  # together, so the moved file still reads its own write-ahead log
+        if os.path.exists(path + suffix):
+            os.replace(path + suffix, damaged + suffix)
+    init(path)
+    saved = {}
+    with closing(sqlite3.connect(damaged, timeout=15)) as old, closing(connect(path)) as new:
+        for table in ("meta", "sessions", "events", "minutes", "clips"):
+            try:
+                have = {r[1] for r in old.execute(f"PRAGMA table_info({table})")}
+            except sqlite3.DatabaseError:
+                have = set()
+            cols = [r[1] for r in new.execute(f"PRAGMA table_info({table})") if r[1] in have]
+            if not cols:
+                continue
+            rows = _salvage(old, table, cols)
+            new.executemany(f"INSERT OR IGNORE INTO {table}({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+                            rows)
+            saved[table] = len(rows)
+        new.commit()
+    return damaged, saved
+
+
+def _salvage(db, table, cols):
+    """Every row that can still be read, found by rowid ranges: a range that hits a damaged page is split in half
+    until only the unreadable rows are left out."""
+    query = f"SELECT {','.join(cols)} FROM {table} WHERE rowid BETWEEN ? AND ?"
+    try:
+        top = min(db.execute(f"SELECT MAX(rowid) FROM {table}").fetchone()[0] or 0, 1 << 24)
+    except sqlite3.DatabaseError:
+        top = 1 << 24
+    rows = []
+
+    def take(lo, hi):
+        try:
+            rows.extend(tuple(r) for r in db.execute(query, (lo, hi)).fetchall())
+        except sqlite3.DatabaseError:
+            if lo < hi:
+                mid = (lo + hi) // 2
+                take(lo, mid)
+                take(mid + 1, hi)
+
+    for lo in range(1, top + 1, 4096):
+        take(lo, min(top, lo + 4095))
+    return rows
+
+
 def init(path):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with closing(connect(path)) as db:
@@ -55,6 +118,10 @@ class Store:
 
     def __init__(self, path):
         self.path = path
+        if not healthy(path):
+            damaged, saved = repair(path)
+            print(f"The history file was damaged. Rebuilt it from everything still readable "
+                  f"({', '.join(f'{n} {t}' for t, n in saved.items())}); the damaged file is kept as {damaged}")
         init(path)
         self._jobs = queue.Queue()
         self._thread = threading.Thread(target=self._run, name="store", daemon=True)

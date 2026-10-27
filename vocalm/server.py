@@ -9,6 +9,7 @@ import os
 import queue
 import secrets
 import socket
+import sqlite3
 import threading
 import time
 import urllib.parse
@@ -44,6 +45,12 @@ def cliptrove_status():
             return {"running": json.loads(r.read()).get("app") == "cliptrove", "url": CLIPTROVE + "/"}
     except (OSError, ValueError):
         return {"running": False, "url": CLIPTROVE + "/"}
+
+
+def failure_message(e):
+    if isinstance(e, sqlite3.DatabaseError) and "malformed" in str(e):
+        return "Your history file is damaged. Quit Vocalm and start it again: it repairs the file as it starts"
+    return "Something went wrong; it's in vocalm.log"
 
 
 class Server:
@@ -228,7 +235,7 @@ def make_handler(server):
                 return self._error(400, str(e))
             except Exception as e:
                 print("Request failed:", path, repr(e))
-                return self._error(500, "Something went wrong; it's in vocalm.log")
+                return self._error(500, failure_message(e))
             return self._error(404, "Not found")
 
         def _live(self):

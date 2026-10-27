@@ -102,6 +102,49 @@ class StoreTest(unittest.TestCase):
         self.assertIn("2026-10-15T20:05:00,-9.0,2.0,-24.1,Apex Legends,live", text)
 
 
+class RepairTest(unittest.TestCase):
+    """A damaged vocalm.db must not leave the dashboard with "Couldn't load your history" for good."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="vocalm-repair-")
+        self.db_path = os.path.join(self.dir, "vocalm.db")
+        store.init(self.db_path)
+        with closing(store.connect(self.db_path)) as db:
+            db.executemany("INSERT INTO events(ts, peak_dbfs, duration_s, threshold_dbfs, app) VALUES (?,?,?,?,?)",
+                           [(f"2026-10-{1 + i // 200:02}T20:{i % 60:02}:00", -10.0, 2.0, -24.1, "Apex Legends")
+                            for i in range(3000)])
+            db.executemany("INSERT INTO minutes(minute, app, speaking_s) VALUES (?,?,?)",
+                           [(f"2026-10-{1 + i // 1440:02}T{i // 60 % 24:02}:{i % 60:02}", "Apex Legends", 30.0)
+                            for i in range(3000)])
+            db.commit()
+            db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        with open(self.db_path, "r+b") as f:  # scribble over a few pages in the middle
+            f.seek(4096 * 12)
+            f.write(b"\xff" * 4096 * 3)
+
+    def tearDown(self):
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def test_rebuilds_from_what_is_readable_and_keeps_the_damaged_file(self):
+        self.assertFalse(store.healthy(self.db_path))
+        history = store.Store(self.db_path)
+        history.close()
+        self.assertTrue(store.healthy(self.db_path))
+        with closing(store.connect(self.db_path)) as db:
+            events = db.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+            minutes = db.execute("SELECT COUNT(*) FROM minutes").fetchone()[0]
+            store.overview(db, 0, today=date(2026, 10, 20))  # what failed before
+        self.assertGreater(events + minutes, 5000)
+        self.assertLess(events + minutes, 6000)
+        self.assertTrue(any(".damaged-" in name for name in os.listdir(self.dir)))
+
+    def test_a_healthy_file_is_left_alone(self):
+        os.remove(self.db_path)
+        store.init(self.db_path)
+        store.Store(self.db_path).close()
+        self.assertEqual([n for n in os.listdir(self.dir) if ".damaged-" in n], [])
+
+
 class LegacyImportTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp(prefix="vocalm-legacy-")
